@@ -7,7 +7,7 @@ require_once __DIR__ . '/../../config/database.php';
 require_once __DIR__ . '/../../classes/StockLog.php';
 require_once __DIR__ . '/../../classes/Product.php';
 
-$productId = isset($_GET['id']) ? (int)$_GET['id'] : 0;
+$productId = isset($_GET['id']) ? (int) $_GET['id'] : 0;
 
 if ($productId === 0) {
     http_response_code(400);
@@ -32,7 +32,7 @@ try {
     echo json_encode([
         'status' => 'success',
         'product_name' => $productDetails['name'],
-        'history' => $history
+        'history' => array_slice($history, 0, 10)
     ]);
 
 } catch (Exception $e) {
