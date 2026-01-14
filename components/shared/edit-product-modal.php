@@ -39,7 +39,7 @@ class EditProductModal
     
     <div class="absolute inset-0 bg-gray-900/60 backdrop-blur-md transition-opacity duration-300" data-modal-backdrop></div>
 
-    <div class="relative w-full max-w-2xl bg-white rounded-2xl shadow-2xl flex flex-col max-h-[90vh] animate-modal-scale z-10 overflow-hidden ring-1 ring-gray-200">
+    <div class="relative w-full max-w-2xl bg-white rounded-2xl shadow-2xl flex flex-col max-h-[calc(100vh-2rem)] md:max-h-[90vh] animate-modal-scale z-10 overflow-hidden ring-1 ring-gray-200">
 
         <div class="flex items-center justify-between px-6 py-5 border-b border-gray-100 bg-white flex-shrink-0">
             <h3 class="text-xl font-bold text-gray-800">Edit Product</h3>
@@ -48,7 +48,7 @@ class EditProductModal
             </button>
         </div>
 
-        <div class="flex-1 min-h-0 overflow-y-auto custom-scrollbar p-6 md:p-8 bg-white">
+        <div class="overflow-y-auto custom-scrollbar p-6 md:p-8 bg-white">
             <form id="edit-product-form" class="space-y-6">
                 <!-- ... form fields ... -->
                 <input type="hidden" name="id" id="edit-product-id">
@@ -233,53 +233,6 @@ class EditProductModal
             expiryContainer.classList.add('hidden');
         }
     };
-
-    form.addEventListener('submit', async function(e) {
-        e.preventDefault();
-        console.log('Edit form submission intercepted');
-        
-        const errorDiv = document.getElementById('edit-modal-error');
-        const successDiv = document.getElementById('edit-modal-success');
-        const submitBtn = document.getElementById('edit-submit-btn');
-        
-        errorDiv.classList.add('hidden');
-        successDiv.classList.add('hidden');
-        
-        const formData = new FormData(form);
-        const data = Object.fromEntries(formData.entries());
-        
-        submitBtn.disabled = true;
-        const originalBtnHtml = submitBtn.innerHTML;
-        submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i> Saving...';
-
-        try {
-            const response = await fetch(BASE_URL + '/api/inventory/update.php', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(data)
-            });
-
-            const result = await response.json();
-
-            if (result.status === 'success') {
-                successDiv.classList.remove('hidden');
-                setTimeout(() => {
-                    location.reload();
-                }, 1000);
-            } else {
-                errorDiv.querySelector('span').textContent = result.message || 'Failed to update product';
-                errorDiv.classList.remove('hidden');
-                submitBtn.disabled = false;
-                submitBtn.innerHTML = originalBtnHtml;
-            }
-        } catch (err) {
-            console.error('Update failed:', err);
-            errorDiv.querySelector('span').textContent = 'An error occurred. Please try again.';
-            errorDiv.classList.remove('hidden');
-            submitBtn.disabled = false;
-            submitBtn.innerHTML = originalBtnHtml;
-        }
-    });
 })();
 </script>
 HTML;

@@ -496,15 +496,61 @@ echo $receiveModal->render();
 
         function closeEditModal() {
             editModal.classList.add('hidden');
+            editModal.classList.remove('flex');
             editForm.reset();
         }
+
+        editForm.addEventListener('submit', async function (e) {
+            e.preventDefault();
+            const submitBtn = document.getElementById('edit-submit-btn');
+            const errorDiv = document.getElementById('edit-modal-error');
+            const successDiv = document.getElementById('edit-modal-success');
+
+            errorDiv.classList.add('hidden');
+            successDiv.classList.add('hidden');
+            submitBtn.disabled = true;
+            submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i>Saving...';
+
+            const formData = new FormData(editForm);
+            const data = Object.fromEntries(formData.entries());
+
+            try {
+                const response = await fetch(`${BASE_URL}/api/inventory/update.php`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(data)
+                });
+
+                const result = await response.json();
+
+                if (result.status === 'success') {
+                    successDiv.classList.remove('hidden');
+                    setTimeout(() => {
+                        location.reload();
+                    }, 1000);
+                } else {
+                    throw new Error(result.message || 'Failed to update product');
+                }
+            } catch (err) {
+                console.error('Update failed:', err);
+                errorDiv.querySelector('span').textContent = err.message;
+                errorDiv.classList.remove('hidden');
+            } finally {
+                if (!successDiv.classList.contains('hidden')) {
+                    submitBtn.innerHTML = '<i class="fas fa-check mr-2"></i>Updated';
+                } else {
+                    submitBtn.disabled = false;
+                    submitBtn.innerHTML = '<span>Save Changes</span>';
+                }
+            }
+        });
 
         document.querySelectorAll('[data-modal-close]').forEach(btn =>
             btn.addEventListener('click', closeEditModal)
         );
 
         editModal.addEventListener('click', function (e) {
-            if (e.target === editModal) closeEditModal();
+            if (e.target === editModal || e.target.closest('[data-modal-backdrop]')) closeEditModal();
         });
 
         function openDeleteModal(id) {
@@ -670,8 +716,6 @@ echo $receiveModal->render();
         }
 
         console.log('All products loaded:', allProducts.length, 'products');
-
-    }
 
         // Initial render on page load
         renderTable(allProducts);

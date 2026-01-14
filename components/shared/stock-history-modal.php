@@ -14,7 +14,7 @@ class StockHistoryModal
             </div>
 
             <div
-                class="relative w-full max-w-lg max-h-[90vh] bg-white rounded-2xl shadow-2xl flex flex-col z-10 animate-modal-scale overflow-hidden ring-1 ring-gray-200">
+                class="relative w-full max-w-lg max-h-[calc(100vh-2rem)] md:max-h-[90vh] bg-white rounded-2xl shadow-2xl flex flex-col z-10 animate-modal-scale overflow-hidden ring-1 ring-gray-200">
 
                 <div class="flex items-center justify-between px-5 py-4 border-b border-gray-100 bg-white flex-shrink-0">
                     <h2 class="text-lg font-bold text-gray-800 flex items-center gap-2">
@@ -29,11 +29,12 @@ class StockHistoryModal
                 </div>
 
                 <div class="flex-1 overflow-y-auto custom-scrollbar p-5 bg-gray-50/50">
+
                     <h3 id="history-product-name" class="text-sm font-bold text-gray-700 mb-3 pb-2 border-b border-gray-200">
                         Loading...
                     </h3>
 
-                    <div id="history-content" class="space-y-3 h-[400px] overflow-y-auto custom-scrollbar pr-2">
+                    <div id="history-content" class="space-y-3 max-h-[400px] overflow-y-auto custom-scrollbar pr-2">
                         <div class="flex flex-col items-center justify-center h-32 text-gray-400">
                             <i class="fas fa-spinner fa-spin text-2xl mb-2"></i>
                             <span class="text-xs">Loading records...</span>
