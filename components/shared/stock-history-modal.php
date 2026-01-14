@@ -14,7 +14,7 @@ class StockHistoryModal
             </div>
 
             <div
-                class="relative w-full max-w-lg max-h-[calc(100vh-2rem)] md:max-h-[90vh] bg-white rounded-2xl shadow-2xl flex flex-col z-10 animate-modal-scale overflow-hidden ring-1 ring-gray-200">
+                class="relative w-full max-w-lg h-[calc(100vh-2rem)] sm:h-auto max-h-[calc(100vh-2rem)] sm:max-h-[90vh] bg-white rounded-2xl shadow-2xl flex flex-col z-10 animate-modal-scale overflow-hidden ring-1 ring-gray-200">
 
                 <div class="flex items-center justify-between px-5 py-4 border-b border-gray-100 bg-white flex-shrink-0">
                     <h2 class="text-lg font-bold text-gray-800 flex items-center gap-2">

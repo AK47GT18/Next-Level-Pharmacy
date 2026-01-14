@@ -20,7 +20,7 @@ class ReceiveStockModal
     <div class="absolute inset-0 bg-gray-900/60 backdrop-blur-md" data-modal-backdrop></div>
 
     <!-- Modal Card -->
-    <div class="relative w-full max-w-lg max-h-[calc(100vh-2rem)] md:max-h-[90vh] bg-white rounded-2xl shadow-2xl flex flex-col overflow-hidden animate-modal-open">
+    <div class="relative w-full max-w-lg h-[calc(100vh-2rem)] sm:h-auto max-h-[calc(100vh-2rem)] sm:max-h-[90vh] bg-white rounded-2xl shadow-2xl flex flex-col overflow-hidden animate-modal-open">
 
         <!-- Header -->
         <div class="flex items-center justify-between px-6 py-4 border-b border-gray-100 bg-white flex-shrink-0">
@@ -33,7 +33,7 @@ class ReceiveStockModal
         </div>
 
         <!-- Body -->
-        <div class="flex-1 p-6 overflow-y-auto custom-scrollbar">
+        <div class="flex-1 p-6 overflow-y-auto min-h-0 custom-scrollbar">
             <form id="receive-stock-form" class="space-y-4">
                 <input type="hidden" name="id" id="receive-product-id">
                 
