@@ -34,7 +34,7 @@ class StockHistoryModal
                         Loading...
                     </h3>
 
-                    <div id="history-content" class="space-y-3 max-h-[400px] overflow-y-auto custom-scrollbar pr-2">
+                    <div id="history-content" class="space-y-3 overflow-y-auto custom-scrollbar pr-2">
                         <div class="flex flex-col items-center justify-center h-32 text-gray-400">
                             <i class="fas fa-spinner fa-spin text-2xl mb-2"></i>
                             <span class="text-xs">Loading records...</span>
