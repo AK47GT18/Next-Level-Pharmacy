@@ -8,14 +8,6 @@ vendor/
 package-lock.json
 composer.lock
 
-# FontAwesome source bloat (keeps only minified CSS and webfonts)
-assets/fontawesome/svgs/
-assets/fontawesome/svgs-full/
-assets/fontawesome/scss/
-assets/fontawesome/sprites/
-assets/fontawesome/sprites-full/
-assets/fontawesome/js/
-assets/fontawesome/metadata/
 
 # Duplicate project folder
 rxpms/
