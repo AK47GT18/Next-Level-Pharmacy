@@ -33,7 +33,7 @@ class ReceiveStockModal
         </div>
 
         <!-- Body -->
-        <div class="p-6 overflow-y-auto custom-scrollbar">
+        <div class="flex-1 p-6 overflow-y-auto custom-scrollbar">
             <form id="receive-stock-form" class="space-y-4">
                 <input type="hidden" name="id" id="receive-product-id">
                 
