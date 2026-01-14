@@ -671,43 +671,7 @@ echo $receiveModal->render();
 
         console.log('All products loaded:', allProducts.length, 'products');
 
-        // ✅ Handle Edit Form Submit
-        if (editForm) {
-            editForm.addEventListener('submit', function(e) {
-                e.preventDefault();
-                const submitBtn = editForm.querySelector('button[type="submit"]');
-                const originalBtnText = submitBtn.innerHTML;
-                
-                submitBtn.disabled = true;
-                submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i> Saving...';
-
-                const formData = new FormData(editForm);
-                const data = Object.fromEntries(formData.entries());
-
-                fetch(`${BASE_URL}/api/inventory/update.php`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(data)
-                })
-                .then(response => response.json())
-                .then(result => {
-                    if (result.status === 'success') {
-                        alert('Product updated successfully!');
-                        location.reload();
-                    } else {
-                        alert(result.message || 'Failed to update product');
-                        submitBtn.disabled = false;
-                        submitBtn.innerHTML = originalBtnText;
-                    }
-                })
-                .catch(err => {
-                    console.error('Update failed:', err);
-                    alert('An error occurred. Please try again.');
-                    submitBtn.disabled = false;
-                    submitBtn.innerHTML = originalBtnText;
-                });
-            });
-        }
+    }
 
         // Initial render on page load
         renderTable(allProducts);
