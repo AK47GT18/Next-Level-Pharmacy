@@ -13,11 +13,11 @@ class AddProductModal
     {
         $base = defined('BASE_URL') ? BASE_URL : '/Next-Level/rxpms';
         return <<<HTML
-<div id="{$this->id}" class="fixed inset-0 z-50 hidden items-center justify-center p-4 transition-all duration-300">
+<div id="{$this->id}" class="fixed inset-0 z-50 hidden items-center justify-center p-2 sm:p-4 transition-all duration-300">
     
     <div class="absolute inset-0 bg-gray-900/60 backdrop-blur-md transition-opacity" data-modal-backdrop></div>
     
-    <div class="relative w-full max-w-xl bg-white rounded-2xl shadow-2xl flex flex-col h-[85vh] md:h-auto md:max-h-[80vh] animate-modal-scale z-10 overflow-hidden ring-1 ring-gray-200">
+    <div class="relative w-full max-w-md bg-white rounded-2xl shadow-2xl flex flex-col max-h-full sm:max-h-[90vh] animate-modal-scale z-10 overflow-hidden ring-1 ring-gray-200">
         
         <div class="flex items-center justify-between px-6 py-5 border-b border-gray-100 flex-shrink-0 bg-white rounded-t-xl">
             <div>
@@ -29,7 +29,7 @@ class AddProductModal
             </button>
         </div>
 
-        <div class="flex-1 overflow-y-auto min-h-0 custom-scrollbar p-6 md:p-8 bg-white">
+        <div class="flex-1 overflow-y-auto min-h-0 custom-scrollbar p-6 bg-white">
             <form id="addProductForm" class="space-y-6">
                 
                 <div class="space-y-2">
