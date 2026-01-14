@@ -29,7 +29,7 @@ class AddProductModal
             </button>
         </div>
 
-        <div class="flex-1 min-h-0 overflow-y-auto custom-scrollbar p-6 md:p-8 bg-white">
+        <div class="flex-1 overflow-y-auto custom-scrollbar p-5 bg-gray-50/50">
             <form id="addProductForm" class="space-y-6">
                 
                 <div class="space-y-2">

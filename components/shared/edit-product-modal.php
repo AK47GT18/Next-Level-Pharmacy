@@ -48,7 +48,7 @@ class EditProductModal
             </button>
         </div>
 
-        <div class="overflow-y-auto custom-scrollbar p-6 md:p-8 bg-white">
+        <div class="flex-1 overflow-y-auto custom-scrollbar p-5 bg-gray-50/50">
             <form id="edit-product-form" class="space-y-6">
                 <!-- ... form fields ... -->
                 <input type="hidden" name="id" id="edit-product-id">
