@@ -32,7 +32,7 @@ try {
     echo json_encode([
         'status' => 'success',
         'product_name' => $productDetails['name'],
-        'history' => array_slice($history, 0, 10)
+        'history' => $history
     ]);
 
 } catch (Exception $e) {

@@ -35,11 +35,11 @@ class EditProductModal
         }
 
         return <<<HTML
-<div id="{$modalId}" class="fixed inset-0 z-50 hidden items-center justify-center p-2 sm:p-4 transition-all duration-300">
+<div id="{$modalId}" class="fixed inset-0 z-50 hidden items-center justify-center p-4 transition-all duration-300">
     
     <div class="absolute inset-0 bg-gray-900/60 backdrop-blur-md transition-opacity duration-300" data-modal-backdrop></div>
 
-    <div class="relative w-full max-w-md bg-white rounded-2xl shadow-2xl flex flex-col max-h-full sm:max-h-[90vh] animate-modal-scale z-10 overflow-hidden ring-1 ring-gray-200">
+    <div class="relative w-full max-w-2xl bg-white rounded-2xl shadow-2xl flex flex-col max-h-[90vh] animate-modal-scale z-10 overflow-hidden ring-1 ring-gray-200">
 
         <div class="flex items-center justify-between px-6 py-5 border-b border-gray-100 bg-white flex-shrink-0">
             <h3 class="text-xl font-bold text-gray-800">Edit Product</h3>
@@ -48,7 +48,7 @@ class EditProductModal
             </button>
         </div>
 
-        <div class="flex-1 overflow-y-auto min-h-0 custom-scrollbar p-6 bg-white">
+        <div class="overflow-y-auto custom-scrollbar p-6 md:p-8 bg-white">
             <form id="edit-product-form" class="space-y-6">
                 <!-- ... form fields ... -->
                 <input type="hidden" name="id" id="edit-product-id">
@@ -179,7 +179,6 @@ class EditProductModal
     function hide() {
         modal.classList.add('hidden');
         modal.classList.remove('flex'); 
-        document.body.style.overflow = '';
         form.reset();
         expiryContainer.classList.add('hidden');
         errorDiv.classList.add('hidden');
@@ -203,7 +202,6 @@ class EditProductModal
     window.openEditModal = function(product) {
         modal.classList.remove('hidden');
         modal.classList.add('flex');
-        document.body.style.overflow = 'hidden';
         
         errorDiv.classList.add('hidden');
         successDiv.classList.add('hidden');

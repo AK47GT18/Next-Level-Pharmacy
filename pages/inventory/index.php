@@ -496,65 +496,7 @@ echo $receiveModal->render();
 
         function closeEditModal() {
             editModal.classList.add('hidden');
-            editModal.classList.remove('flex');
             editForm.reset();
-        }
-
-        if (editForm) {
-            editForm.addEventListener('submit', async function (e) {
-                e.preventDefault();
-                const submitBtn = document.getElementById('edit-submit-btn');
-                const errorDiv = document.getElementById('edit-modal-error');
-                const successDiv = document.getElementById('edit-modal-success');
-
-                if (errorDiv) errorDiv.classList.add('hidden');
-                if (successDiv) successDiv.classList.add('hidden');
-
-                if (submitBtn) {
-                    submitBtn.disabled = true;
-                    submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i>Saving...';
-                }
-
-                const formData = new FormData(editForm);
-                const data = Object.fromEntries(formData.entries());
-
-                try {
-                    const response = await fetch(`${BASE_URL}/api/inventory/update.php`, {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify(data)
-                    });
-
-                    const result = await response.json();
-
-                    if (result.status === 'success') {
-                        if (successDiv) successDiv.classList.remove('hidden');
-                        setTimeout(() => {
-                            location.reload();
-                        }, 1000);
-                    } else {
-                        throw new Error(result.message || 'Failed to update product');
-                    }
-                } catch (err) {
-                    console.error('Update failed:', err);
-                    if (errorDiv) {
-                        const span = errorDiv.querySelector('span');
-                        if (span) span.textContent = err.message;
-                        errorDiv.classList.remove('hidden');
-                    } else {
-                        alert('Error: ' + err.message);
-                    }
-                } finally {
-                    if (submitBtn) {
-                        if (successDiv && !successDiv.classList.contains('hidden')) {
-                            submitBtn.innerHTML = '<i class="fas fa-check mr-2"></i>Updated';
-                        } else {
-                            submitBtn.disabled = false;
-                            submitBtn.innerHTML = '<span>Save Changes</span>';
-                        }
-                    }
-                }
-            });
         }
 
         document.querySelectorAll('[data-modal-close]').forEach(btn =>
@@ -562,7 +504,7 @@ echo $receiveModal->render();
         );
 
         editModal.addEventListener('click', function (e) {
-            if (e.target === editModal || e.target.closest('[data-modal-backdrop]')) closeEditModal();
+            if (e.target === editModal) closeEditModal();
         });
 
         function openDeleteModal(id) {
