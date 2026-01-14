@@ -39,7 +39,7 @@ class EditProductModal
     
     <div class="absolute inset-0 bg-gray-900/60 backdrop-blur-md transition-opacity duration-300" data-modal-backdrop></div>
 
-    <div class="relative w-full max-w-2xl bg-white rounded-2xl shadow-2xl flex flex-col h-auto max-h-[90vh] animate-modal-scale z-10 overflow-hidden ring-1 ring-gray-200">
+    <div class="relative w-full max-w-xl bg-white rounded-2xl shadow-2xl flex flex-col h-[85vh] md:h-auto md:max-h-[80vh] animate-modal-scale z-10 overflow-hidden ring-1 ring-gray-200">
 
         <div class="flex items-center justify-between px-6 py-5 border-b border-gray-100 bg-white flex-shrink-0">
             <h3 class="text-xl font-bold text-gray-800">Edit Product</h3>
