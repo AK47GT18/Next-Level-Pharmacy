@@ -1,0 +1,46 @@
+# Config files with sensitive data
+config/config.php
+.env
+
+# Dependencies
+node_modules/
+vendor/
+package-lock.json
+composer.lock
+
+# FontAwesome source bloat (keeps only minified CSS and webfonts)
+assets/fontawesome/svgs/
+assets/fontawesome/svgs-full/
+assets/fontawesome/scss/
+assets/fontawesome/sprites/
+assets/fontawesome/sprites-full/
+assets/fontawesome/js/
+assets/fontawesome/metadata/
+
+# Duplicate project folder
+rxpms/
+
+# Uploads
+uploads/*
+!uploads/.gitkeep
+
+# Temp files
+uploads/temp/*
+!uploads/temp/.gitkeep
+
+# IDE files
+.vscode/
+.idea/
+*.sublime-project
+*.sublime-workspace
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+error_log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*

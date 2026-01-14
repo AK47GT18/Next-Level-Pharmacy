@@ -1,0 +1,4 @@
+private $host = 'sql212.infinityfree.com';
+    private $db_name = 'if0_40370459_next_level';
+    private $username = 'if0_40370459';
+    private $password = '3ymHlQ1I5m'; // As requested, no passw
