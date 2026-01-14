@@ -506,10 +506,13 @@ echo $receiveModal->render();
             const errorDiv = document.getElementById('edit-modal-error');
             const successDiv = document.getElementById('edit-modal-success');
 
-            errorDiv.classList.add('hidden');
-            successDiv.classList.add('hidden');
-            submitBtn.disabled = true;
-            submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i>Saving...';
+            if (errorDiv) errorDiv.classList.add('hidden');
+            if (successDiv) successDiv.classList.add('hidden');
+
+            if (submitBtn) {
+                submitBtn.disabled = true;
+                submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i>Saving...';
+            }
 
             const formData = new FormData(editForm);
             const data = Object.fromEntries(formData.entries());
@@ -524,7 +527,7 @@ echo $receiveModal->render();
                 const result = await response.json();
 
                 if (result.status === 'success') {
-                    successDiv.classList.remove('hidden');
+                    if (successDiv) successDiv.classList.remove('hidden');
                     setTimeout(() => {
                         location.reload();
                     }, 1000);
@@ -533,14 +536,21 @@ echo $receiveModal->render();
                 }
             } catch (err) {
                 console.error('Update failed:', err);
-                errorDiv.querySelector('span').textContent = err.message;
-                errorDiv.classList.remove('hidden');
-            } finally {
-                if (!successDiv.classList.contains('hidden')) {
-                    submitBtn.innerHTML = '<i class="fas fa-check mr-2"></i>Updated';
+                if (errorDiv) {
+                    const span = errorDiv.querySelector('span');
+                    if (span) span.textContent = err.message;
+                    errorDiv.classList.remove('hidden');
                 } else {
-                    submitBtn.disabled = false;
-                    submitBtn.innerHTML = '<span>Save Changes</span>';
+                    alert('Error: ' + err.message);
+                }
+            } finally {
+                if (submitBtn) {
+                    if (successDiv && !successDiv.classList.contains('hidden')) {
+                        submitBtn.innerHTML = '<i class="fas fa-check mr-2"></i>Updated';
+                    } else {
+                        submitBtn.disabled = false;
+                        submitBtn.innerHTML = '<span>Save Changes</span>';
+                    }
                 }
             }
         });
