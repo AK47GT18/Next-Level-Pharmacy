@@ -335,17 +335,53 @@ class Product
     }
 
     /**
+     * Delete product
+     */
+    /**
+     * Delete product (Soft Delete)
+     */
+    /**
      * Delete product (Hard Delete)
+     */
+    /**
+     * Delete product (Hard Delete)
+     * Removes product and all related data (sales, logs)
      */
     public function delete()
     {
         try {
-            $query = "DELETE FROM " . $this->table . " WHERE id = :id";
-            $stmt = $this->conn->prepare($query);
-            $stmt->bindParam(':id', $this->id, PDO::PARAM_INT);
-            return $stmt->execute();
+            $this->conn->beginTransaction();
+
+            // 1. Delete from sale_items
+            $querySales = "DELETE FROM sale_items WHERE product_id = :id";
+            $stmtSales = $this->conn->prepare($querySales);
+            $stmtSales->bindParam(':id', $this->id, PDO::PARAM_INT);
+            $stmtSales->execute();
+
+            // 2. Delete from stock_logs
+            $queryLogs = "DELETE FROM stock_logs WHERE product_id = :id";
+            $stmtLogs = $this->conn->prepare($queryLogs);
+            $stmtLogs->bindParam(':id', $this->id, PDO::PARAM_INT);
+            $stmtLogs->execute();
+
+            // 3. Delete the product itself
+            $queryProduct = "DELETE FROM " . $this->table . " WHERE id = :id";
+            $stmtProduct = $this->conn->prepare($queryProduct);
+            $stmtProduct->bindParam(':id', $this->id, PDO::PARAM_INT);
+
+            if ($stmtProduct->execute()) {
+                $this->conn->commit();
+                return true;
+            } else {
+                $this->conn->rollBack();
+                return false;
+            }
+
         } catch (PDOException $e) {
-            error_log("Product delete error: " . $e->getMessage());
+            if ($this->conn->inTransaction()) {
+                $this->conn->rollBack();
+            }
+            error_log("Product cascade delete error: " . $e->getMessage());
             return false;
         }
     }

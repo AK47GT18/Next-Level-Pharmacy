@@ -297,7 +297,7 @@ require_once __DIR__ . '/../../components/shared/delete-confirmation-modal.php';
 require_once __DIR__ . '/../../components/shared/stock-history-modal.php';
 require_once __DIR__ . '/../../components/shared/receive-stock-modal.php';
 
-$addModal = new AddProductModal();
+$addModal = new AddProductModal($categories);
 echo $addModal->render();
 
 $editModal = new EditProductModal($categories);

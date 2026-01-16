@@ -3,15 +3,35 @@
 class AddProductModal
 {
     private string $id;
+    private array $categories;
 
-    public function __construct(string $id = 'addProductModal')
+    public function __construct(array $categories = [], string $id = 'addProductModal')
     {
         $this->id = $id;
+        $this->categories = $categories ?? [];
     }
 
     public function render(): string
     {
         $base = defined('BASE_URL') ? BASE_URL : '/Next-Level/rxpms';
+
+        // Build category options
+        $categoryOptions = '';
+        if (!empty($this->categories)) {
+            $currentType = '';
+            foreach ($this->categories as $cat) {
+                if (($cat['type_name'] ?? '') !== $currentType) {
+                    if ($currentType !== '')
+                        $categoryOptions .= '</optgroup>';
+                    $categoryOptions .= '<optgroup label="' . htmlspecialchars($cat['type_name'] ?? 'Other') . '">';
+                    $currentType = $cat['type_name'] ?? '';
+                }
+                $categoryOptions .= '<option value="' . intval($cat['id']) . '">' . htmlspecialchars($cat['name'] ?? '') . '</option>';
+            }
+            if ($currentType !== '')
+                $categoryOptions .= '</optgroup>';
+        }
+
         return <<<HTML
 <div id="{$this->id}" class="fixed inset-0 z-50 hidden overflow-y-auto items-start md:items-center justify-center p-4 transition-all duration-300">
     
@@ -53,54 +73,7 @@ class AddProductModal
                                 class="w-full pl-4 pr-10 py-3 border border-gray-300 rounded-lg focus:outline-none focus:border-blue-600 focus:ring-1 focus:ring-blue-600 transition appearance-none bg-white text-gray-700"
                             >
                                 <option value="">Select Category...</option>
-                                
-                                <optgroup label="Pain & Inflammation">
-                                    <option value="1">Analgesics</option>
-                                    <option value="2">Corticosteroids</option>
-                                </optgroup>
-
-                                <optgroup label="Infection Control">
-                                    <option value="3">Antibiotics</option>
-                                    <option value="4">Antifungal</option>
-                                    <option value="5">Antiviral</option>
-                                    <option value="6">Anti-protozoa</option>
-                                    <option value="7">Anthelmintics</option>
-                                </optgroup>
-
-                                <optgroup label="Respiratory">
-                                    <option value="8">Cough & Cold Syrups</option>
-                                    <option value="9">Antihistamines</option>
-                                    <option value="10">Anti-asthmatics</option>
-                                </optgroup>
-
-                                <optgroup label="Gastrointestinal">
-                                    <option value="11">Antacids</option>
-                                    <option value="12">PPIs</option>
-                                    <option value="13">Antiemetics</option>
-                                    <option value="14">Laxatives</option>
-                                    <option value="15">Anti-hemorrhoids</option>
-                                </optgroup>
-
-                                <optgroup label="Chronic & Mental">
-                                    <option value="16">Hypertensives</option>
-                                    <option value="17">Antidiabetics</option>
-                                    <option value="18">Antidepressants</option>
-                                    <option value="19">Antipsychotics</option>
-                                </optgroup>
-
-                                <optgroup label="Wellness">
-                                    <option value="20">Supplements</option>
-                                    <option value="21">Appetite Stimulants</option>
-                                </optgroup>
-
-                                <optgroup label="Women's Health">
-                                    <option value="22">Contraceptives</option>
-                                    <option value="23">Sanitary Products</option>
-                                </optgroup>
-
-                                <optgroup label="Skin">
-                                    <option value="24">Triple Action Creams</option>
-                                </optgroup>
+                                {$categoryOptions}
                             </select>
                             <div class="absolute inset-y-0 right-0 flex items-center px-4 pointer-events-none text-gray-500">
                                 
