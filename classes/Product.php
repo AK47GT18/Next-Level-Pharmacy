@@ -260,34 +260,28 @@ class Product
     /**
      * Get counts by type
      */
+    /**
+     * Get counts by type
+     */
     public function getCountsByType()
     {
         try {
             $query = "SELECT 
-                        COALESCE(LOWER(pt.name), 'other') as type_name,
+                        pt.name as type_name,
+                        pt.icon_class,
                         COUNT(p.id) as count
                       FROM product_types pt
                       LEFT JOIN categories c ON c.product_type_id = pt.id
-                      LEFT JOIN products p ON p.category_id = c.id
-                      GROUP BY pt.id, pt.name";
+                      LEFT JOIN products p ON p.category_id = c.id AND p.is_deleted = 0
+                      GROUP BY pt.id, pt.name, pt.icon_class
+                      ORDER BY pt.name ASC";
 
             $stmt = $this->conn->prepare($query);
             $stmt->execute();
-            $results = $stmt->fetchAll(PDO::FETCH_ASSOC);
-
-            $counts = ['medicine' => 0, 'cosmetic' => 0, 'skincare' => 0, 'perfume' => 0];
-
-            foreach ($results as $row) {
-                $type = strtolower($row['type_name']);
-                if (isset($counts[$type])) {
-                    $counts[$type] = intval($row['count']);
-                }
-            }
-
-            return $counts;
+            return $stmt->fetchAll(PDO::FETCH_ASSOC);
         } catch (PDOException $e) {
             error_log("Product getCountsByType error: " . $e->getMessage());
-            return ['medicine' => 0, 'cosmetic' => 0, 'skincare' => 0, 'perfume' => 0];
+            return [];
         }
     }
 

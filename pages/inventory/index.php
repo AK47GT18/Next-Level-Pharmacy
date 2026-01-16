@@ -72,7 +72,7 @@ try {
     $lowStockCount = 0;
     $expiringCount = 0;
     $outOfStockCount = 0;
-    $typeCounts = ['medicine' => 0, 'cosmetic' => 0, 'skincare' => 0, 'perfume' => 0];
+    $typeCounts = [];
 }
 
 // NEW: Instantiate SearchBar for the inventory page
@@ -221,42 +221,21 @@ $searchBar = new SearchBar([
                 data-filter="expiring-soon">
                 <i class="fas fa-clock mr-2"></i>Expiring Soon
             </button>
+
             <div class="border-l border-gray-300 h-8 mx-2"></div>
-            <button
-                class="px-4 py-2 rounded-lg hover:bg-gray-100 text-sm font-medium transition text-gray-600 hover:text-blue-700"
-                data-filter="medicine">
-                <i class="fas fa-capsules mr-2"></i>Medicines
-            </button>
-            <button
-                class="px-4 py-2 rounded-lg hover:bg-gray-100 text-sm font-medium transition text-gray-600 hover:text-blue-700"
-                data-filter="cosmetic">
-                <i class="fas fa-spa mr-2"></i>Cosmetics
-            </button>
-            <button
-                class="px-4 py-2 rounded-lg hover:bg-gray-100 text-sm font-medium transition text-gray-600 hover:text-blue-700"
-                data-filter="skincare">
-                <i class="fas fa-leaf mr-2"></i>Skincare
-            </button>
-            <button
-                class="px-4 py-2 rounded-lg hover:bg-gray-100 text-sm font-medium transition text-gray-600 hover:text-blue-700"
-                data-filter="perfume">
-                <i class="fas fa-flask-vial mr-2"></i>Perfumes
-            </button>
-            <button
-                class="px-4 py-2 rounded-lg hover:bg-gray-100 text-sm font-medium transition text-gray-600 hover:text-blue-700"
-                data-filter="medical_devices">
-                <i class="fas fa-stethoscope mr-2"></i>Medical Devices
-            </button>
-            <button
-                class="px-4 py-2 rounded-lg hover:bg-gray-100 text-sm font-medium transition text-gray-600 hover:text-blue-700"
-                data-filter="surgical_consumables">
-                <i class="fas fa-syringe mr-2"></i>Surgical & Consumables
-            </button>
-            <button
-                class="px-4 py-2 rounded-lg hover:bg-gray-100 text-sm font-medium transition text-gray-600 hover:text-blue-700"
-                data-filter="sanitary_hygiene">
-                <i class="fas fa-soap mr-2"></i>Sanitary & Hygiene
-            </button>
+
+            <?php foreach ($typeCounts as $type): ?>
+                <?php
+                // Create a slug for data-filter
+                $filterSlug = strtolower(str_replace([' ', '&'], ['_', ''], $type['type_name']));
+                ?>
+                <button
+                    class="px-4 py-2 rounded-lg hover:bg-gray-100 text-sm font-medium transition text-gray-600 hover:text-blue-700"
+                    data-filter="<?= htmlspecialchars($filterSlug) ?>">
+                    <i
+                        class="<?= htmlspecialchars($type['icon_class'] ?? 'fas fa-tag') ?> mr-2"></i><?= htmlspecialchars($type['type_name']) ?>
+                </button>
+            <?php endforeach; ?>
         </div>
     </div>
 </div>
