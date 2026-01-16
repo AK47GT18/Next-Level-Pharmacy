@@ -335,20 +335,17 @@ class Product
     }
 
     /**
-     * Delete product
-     */
-    /**
-     * Delete product (Soft Delete)
+     * Delete product (Hard Delete)
      */
     public function delete()
     {
         try {
-            $query = "UPDATE " . $this->table . " SET is_deleted = 1, updated_at = NOW() WHERE id = :id";
+            $query = "DELETE FROM " . $this->table . " WHERE id = :id";
             $stmt = $this->conn->prepare($query);
             $stmt->bindParam(':id', $this->id, PDO::PARAM_INT);
             return $stmt->execute();
         } catch (PDOException $e) {
-            error_log("Product soft delete error: " . $e->getMessage());
+            error_log("Product delete error: " . $e->getMessage());
             return false;
         }
     }
