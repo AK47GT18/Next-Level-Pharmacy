@@ -51,8 +51,7 @@ try {
         // Total Prescriptions
         $totalPrescriptions = $conn->query("SELECT COUNT(*) FROM sales WHERE created_at >= DATE_SUB(CURDATE(), INTERVAL 30 DAY)")->fetchColumn() ?? 0;
 
-        // Total Inventory Value
-        $totalInventoryValue = $conn->query("SELECT SUM(stock * cost_price) FROM products WHERE is_deleted = 0")->fetchColumn() ?? 0;
+
 
         $stats = [
             'total_sales_today' => (float) $todaySales,
@@ -63,7 +62,7 @@ try {
             'total_customers' => (int) $totalCustomers,
             'new_customers' => (int) $newCustomers,
             'total_prescriptions' => (int) $totalPrescriptions,
-            'total_inventory_value' => (float) $totalInventoryValue,
+
             'critical_alerts' => (int) $outOfStock + ((int) $lowStockItems > 10 ? (int) $lowStockItems : 0)
         ];
 

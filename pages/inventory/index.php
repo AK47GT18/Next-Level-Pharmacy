@@ -51,10 +51,7 @@ try {
     $outOfStockCount = $outOfStockResult['out_of_stock_count'] ?? 0;
 
     // ✅ Get total inventory value
-    $valueStmt = $db->prepare("SELECT SUM(stock * cost_price) as total_value FROM products WHERE is_deleted = 0");
-    $valueStmt->execute();
-    $valueResult = $valueStmt->fetch(PDO::FETCH_ASSOC);
-    $totalInventoryValue = $valueResult['total_value'] ?? 0;
+
 
     // Fetch categories for modals
     $categoryStmt = $db->prepare("SELECT c.id, c.name, pt.name as type_name 
@@ -109,24 +106,9 @@ $searchBar = new SearchBar([
     </div>
 
     <!-- Stats Cards in Row Format -->
-    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
+    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         <!-- Inventory Value Card -->
-        <div
-            class="glassmorphism rounded-2xl shadow-lg p-6 border-l-4 border-emerald-500 hover:shadow-xl transition-all hover:-translate-y-1 bg-gradient-to-br from-emerald-50/50 to-white">
-            <div class="flex items-center justify-between mb-3">
-                <div class="w-10 h-10 bg-emerald-100 rounded-lg flex items-center justify-center shadow-sm">
-                    <i class="fas fa-vault text-emerald-600"></i>
-                </div>
-                <span
-                    class="text-[9px] font-bold text-emerald-600 bg-emerald-100 px-2 py-1 rounded-full uppercase tracking-wider">Assets</span>
-            </div>
-            <h3 class="text-gray-500 text-xs font-bold uppercase tracking-wide mb-1">Inventory Value</h3>
-            <p class="text-xl font-black text-gray-900 leading-none">MWK <?= number_format($totalInventoryValue, 2) ?>
-            </p>
-            <p class="text-[10px] text-emerald-600 font-medium mt-2 flex items-center gap-1">
-                <i class="fas fa-chart-pie"></i> Total stock value
-            </p>
-        </div>
+
 
         <!-- All Products Card -->
         <div

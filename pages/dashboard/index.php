@@ -42,7 +42,7 @@ try {
     $totalCustomers = $conn->query("SELECT COUNT(DISTINCT sold_by) FROM sales")->fetchColumn() ?? 0;
 
     // Total Inventory Value
-    $totalInventoryValue = $conn->query("SELECT SUM(stock * cost_price) FROM products")->fetchColumn() ?? 0;
+
 
     $recentSalesQuery = $conn->query("
         SELECT 
@@ -135,11 +135,7 @@ try {
             'growth' => null,
             'subtitle' => 'active users'
         ],
-        'inventory_value' => [
-            'value' => 'MWK ' . number_format($totalInventoryValue, 2),
-            'growth' => null,
-            'subtitle' => 'total assets'
-        ]
+
     ];
 
     $quickActions = new QuickActions();
@@ -176,7 +172,7 @@ try {
             ['title' => 'Total Sales (Today)', 'icon' => 'fa-dollar-sign', 'color' => 'blue', 'data' => $stats['total_sales']],
             ['title' => 'Total Products', 'icon' => 'fa-box', 'color' => 'indigo', 'data' => $stats['total_products']],
             ['title' => 'Low Stock Items', 'icon' => 'fa-exclamation-triangle', 'color' => 'amber', 'data' => $stats['low_stock']],
-            ['title' => 'Inventory Value', 'icon' => 'fa-vault', 'color' => 'emerald', 'data' => $stats['inventory_value']]
+
         ];
 
         foreach ($statCards as $card) {
