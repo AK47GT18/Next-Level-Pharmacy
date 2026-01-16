@@ -82,11 +82,7 @@ class EditProductModal
                             class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:border-blue-600 focus:ring-1 focus:ring-blue-600 transition">
                     </div>
 
-                    <div class="space-y-2">
-                        <label class="text-sm font-bold text-gray-700">Cost Price (MWK)</label>
-                        <input id="edit-cost_price" name="cost_price" type="number" step="0.01" min="0"
-                            class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:border-blue-600 focus:ring-1 focus:ring-blue-600 transition">
-                    </div>
+
 
                     <div class="space-y-2">
                         <label class="text-sm font-bold text-gray-700">Low Stock Alert</label>
@@ -210,7 +206,7 @@ class EditProductModal
         document.getElementById('edit-name').value = product.name || '';
         document.getElementById('edit-category_id').value = product.category_id || '';
         document.getElementById('edit-price').value = product.price || '';
-        document.getElementById('edit-cost_price').value = product.cost_price || '';
+
         document.getElementById('edit-stock').value = product.stock || '';
         document.getElementById('edit-low_stock_threshold').value = product.low_stock_threshold || '';
         document.getElementById('edit-description').value = product.description || '';

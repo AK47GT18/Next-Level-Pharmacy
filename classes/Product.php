@@ -13,7 +13,7 @@ class Product
     public $category_id;
     public $description;
     public $price;
-    public $cost_price;
+
     public $stock;
     public $low_stock_threshold;
     public $has_expiry;
@@ -31,10 +31,10 @@ class Product
     {
         try {
             $query = "INSERT INTO " . $this->table . "
-                      (name, category_id, description, price, cost_price, stock, 
+                      (name, category_id, description, price, stock, 
                        low_stock_threshold, has_expiry, expiry_date, created_at, updated_at)
                       VALUES
-                      (:name, :category_id, :description, :price, :cost_price, :stock,
+                      (:name, :category_id, :description, :price, :stock,
                        :low_stock_threshold, :has_expiry, :expiry_date, NOW(), NOW())";
 
             $stmt = $this->conn->prepare($query);
@@ -47,7 +47,7 @@ class Product
             $category_id = !empty($this->category_id) ? intval($this->category_id) : null;
 
             $price = floatval($this->price);
-            $cost_price = !empty($this->cost_price) ? floatval($this->cost_price) : 0;
+
             $stock = intval($this->stock);
             $low_stock_threshold = !empty($this->low_stock_threshold) ? intval($this->low_stock_threshold) : 5;
             $has_expiry = intval($this->has_expiry ?? 0);
@@ -60,7 +60,7 @@ class Product
             $stmt->bindParam(':category_id', $category_id, is_null($category_id) ? PDO::PARAM_NULL : PDO::PARAM_INT);
             $stmt->bindParam(':description', $description, PDO::PARAM_STR);
             $stmt->bindParam(':price', $price);
-            $stmt->bindParam(':cost_price', $cost_price);
+
             $stmt->bindParam(':stock', $stock, PDO::PARAM_INT);
             $stmt->bindParam(':low_stock_threshold', $low_stock_threshold, PDO::PARAM_INT);
             $stmt->bindParam(':has_expiry', $has_expiry, PDO::PARAM_INT);
@@ -96,7 +96,7 @@ class Product
                         p.description,
                         p.category_id,
                         p.price,
-                        p.cost_price,
+
                         p.stock,
                         p.low_stock_threshold,
                         p.has_expiry,
@@ -143,7 +143,7 @@ class Product
                     p.description,
                     p.category_id,
                     p.price,
-                    p.cost_price,
+
                     p.stock,
                     p.low_stock_threshold,
                     p.has_expiry,
@@ -296,7 +296,7 @@ class Product
                           category_id = :category_id,
                           description = :description,
                           price = :price,
-                          cost_price = :cost_price,
+
                           stock = :stock,
                           low_stock_threshold = :low_stock_threshold,
                           has_expiry = :has_expiry,
@@ -315,7 +315,6 @@ class Product
             $stmt->bindParam(':category_id', $category_id, is_null($category_id) ? PDO::PARAM_NULL : PDO::PARAM_INT);
             $stmt->bindParam(':description', $description, PDO::PARAM_STR);
             $stmt->bindParam(':price', $this->price);
-            $stmt->bindParam(':cost_price', $this->cost_price);
             $stmt->bindParam(':stock', $this->stock, PDO::PARAM_INT);
             $stmt->bindParam(':low_stock_threshold', $this->low_stock_threshold, PDO::PARAM_INT);
             $stmt->bindParam(':has_expiry', $this->has_expiry, PDO::PARAM_INT);

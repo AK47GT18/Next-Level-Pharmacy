@@ -41,7 +41,7 @@ try {
     $product->name = $input['name'];
     $product->category_id = $input['category_id'];
     $product->price = $input['price'];
-    $product->cost_price = $input['cost_price'] ?? null;
+
     $product->stock = $newStock;
     $product->low_stock_threshold = $input['low_stock_threshold'] ?? 5;
     $product->has_expiry = $input['has_expiry'] ?? 0;

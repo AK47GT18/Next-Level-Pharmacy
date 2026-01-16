@@ -24,7 +24,7 @@ if (!$input || !isset($input['id']) || !isset($input['quantity'])) {
 
 $productId = (int) $input['id'];
 $receivedQty = (int) $input['quantity'];
-$newCostPrice = isset($input['cost_price']) ? floatval($input['cost_price']) : null;
+
 $notes = $input['notes'] ?? 'Products received';
 
 if ($receivedQty <= 0) {
@@ -47,17 +47,13 @@ try {
 
     // Update product stock and optionally cost price
     $query = "UPDATE products SET stock = :stock, updated_at = NOW()";
-    if ($newCostPrice !== null) {
-        $query .= ", cost_price = :cost_price";
-    }
+
     $query .= " WHERE id = :id";
 
     $stmt = $db->prepare($query);
     $stmt->bindParam(':stock', $newStock, PDO::PARAM_INT);
     $stmt->bindParam(':id', $productId, PDO::PARAM_INT);
-    if ($newCostPrice !== null) {
-        $stmt->bindParam(':cost_price', $newCostPrice);
-    }
+
 
     if (!$stmt->execute()) {
         throw new Exception('Failed to update product stock.');

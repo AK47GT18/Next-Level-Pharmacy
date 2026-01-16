@@ -109,20 +109,7 @@ class AddProductModal
                         </div>
                     </div>
 
-                    <div class="space-y-2">
-                        <label class="text-sm font-bold text-gray-700">Cost Price (MWK)</label>
-                        <div class="relative">
-                           
-                            <input
-                                name="cost_price"
-                                type="number"
-                                step="0.01"
-                                min="0"
-                                placeholder="0.00"
-                                class="w-full pl-14 pr-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:border-blue-600 focus:ring-1 focus:ring-blue-600 transition"
-                            />
-                        </div>
-                    </div>
+
 
                     <div class="space-y-2">
                         <label class="text-sm font-bold text-gray-700">Low Stock Alert</label>
