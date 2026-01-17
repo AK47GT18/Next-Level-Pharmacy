@@ -34,7 +34,7 @@ try {
             LEFT JOIN categories c ON p.category_id = c.id
             LEFT JOIN product_types pt ON c.product_type_id = pt.id
             WHERE p.stock > 0
-            ORDER BY pt.name ASC, c.name ASC, p.name ASC";
+            ORDER BY p.name ASC";
 
     $stmt = $conn->query($sql);
     $products = [];
@@ -51,16 +51,16 @@ try {
     ];
 
     if ($stmt && $stmt->rowCount() > 0) {
-        while($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
-            $row['price'] = (float)$row['price'];
-            $row['stock'] = (int)$row['stock'];
+        while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
+            $row['price'] = (float) $row['price'];
+            $row['stock'] = (int) $row['stock'];
             $row['type'] = $row['type'] ?? 'Other';
             $row['category'] = $row['category'] ?? 'Uncategorized';
-            
+
             // ✅ Use icon_class from DB or map by type
             $typeKey = strtolower($row['type'] ?? 'other');
             $row['icon'] = $row['icon_class'] ?? $typeIcons[$typeKey] ?? $typeIcons['other'];
-            
+
             $products[] = $row;
         }
     }
