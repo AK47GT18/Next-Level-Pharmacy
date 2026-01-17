@@ -1,15 +1,18 @@
 <?php
 
-class MobileMenu {
+class MobileMenu
+{
     private array $menuItems = [];
     private ?array $user = null;
 
-    public function __construct() {
+    public function __construct()
+    {
         $this->menuItems = $this->getMenuItems();
         $this->user = $this->loadUser();
     }
 
-    private function loadUser(): ?array {
+    private function loadUser(): ?array
+    {
         if (isset($_SESSION['user_id'])) {
             require_once __DIR__ . '/../../classes/User.php';
             $db = Database::getInstance()->getConnection();
@@ -18,7 +21,8 @@ class MobileMenu {
         return null;
     }
 
-    private function getMenuItems(): array {
+    private function getMenuItems(): array
+    {
         return [
             'dashboard' => [
                 'label' => 'Dashboard',
@@ -48,7 +52,8 @@ class MobileMenu {
         ];
     }
 
-    public function render(): string {
+    public function render(): string
+    {
         return <<<HTML
         <div id="mobileMenu" class="fixed inset-0 bg-gray-900/50 backdrop-blur-sm z-[60] hidden md:hidden">
             <div class="absolute left-0 top-0 h-full w-[80%] max-w-[300px] gradient-bg text-white shadow-2xl transform
@@ -76,7 +81,8 @@ class MobileMenu {
         HTML;
     }
 
-    private function renderMenuItems(): string {
+    private function renderMenuItems(): string
+    {
         $items = '';
         foreach ($this->menuItems as $key => $item) {
             $items .= <<<HTML
@@ -89,13 +95,14 @@ class MobileMenu {
         return $items;
     }
 
-    private function renderUserProfile(): string {
+    private function renderUserProfile(): string
+    {
         if (!$this->user) {
             return '';
         }
 
         $userName = htmlspecialchars($this->user['name'] ?? 'Guest');
-        $userEmail = htmlspecialchars($this->user['email'] ?? '');
+        $userRole = htmlspecialchars($this->user['role'] ?? 'User');
         $avatarUrl = "https://ui-avatars.com/api/?name=" . urlencode($userName) . "&background=3b82f6&color=fff";
 
         return <<<HTML
@@ -105,7 +112,7 @@ class MobileMenu {
                      class="w-10 h-10 rounded-lg" />
                 <div>
                     <p class="font-semibold">{$userName}</p>
-                    <p class="text-xs text-blue-200">{$userEmail}</p>
+                    <p class="text-xs text-blue-200 uppercase">{$userRole}</p>
                 </div>
             </div>
         </div>

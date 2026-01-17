@@ -103,17 +103,21 @@ class Sidebar
         // Construct the URL outside the HEREDOC string to ensure it's correctly processed by PHP.
         $userProfileUrl = PathHelper::page('settings', ['view' => 'user-profile']);
 
+        $userName = $_SESSION['user_name'] ?? 'Admin User';
+        $userRole = $_SESSION['role'] ?? 'Super Admin';
+        $avatarUrl = "https://ui-avatars.com/api/?name=" . urlencode($userName) . "&background=3b82f6&color=fff&bold=true";
+
         return <<<HTML
         <div class="p-4 border-t border-white/10 bg-white/5">
             <div onclick="window.location.href='{$userProfileUrl}'" class="flex items-center gap-3 px-3 py-3 bg-white/5 rounded-xl hover:bg-white/10 transition cursor-pointer">
                 <div class="relative">
-                    <img src="https://ui-avatars.com/api/?name=Admin+User&background=3b82f6&color=fff&bold=true" alt="Admin User" class="w-12 h-12 rounded-xl ring-2 ring-white/20">
+                    <img src="{$avatarUrl}" alt="{$userName}" class="w-12 h-12 rounded-xl ring-2 ring-white/20">
                     <div class="absolute bottom-0 right-0 w-3.5 h-3.5 bg-emerald-400 rounded-full ring-2 
                          ring-blue-700 pulse-dot"></div>
                 </div>
                 <div class="nav-text flex-1">
-                    <p class="font-semibold text-sm">Admin User</p>
-                    <p class="text-xs text-blue-200">Super Admin</p>
+                    <p class="font-semibold text-sm">{$userName}</p>
+                    <p class="text-xs text-blue-200 uppercase">{$userRole}</p>
                 </div>
                 <i class="fas fa-chevron-right text-xs text-blue-200"></i>
             </div>
