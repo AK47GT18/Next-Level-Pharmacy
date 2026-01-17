@@ -42,7 +42,7 @@ try {
         $query .= " AND p.stock > p.low_stock_threshold";
     }
 
-    $query .= " ORDER BY p.stock ASC, p.name ASC";
+    $query .= " ORDER BY p.name ASC";
 
     $stmt = $conn->prepare($query);
     $stmt->execute($params);

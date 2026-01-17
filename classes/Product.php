@@ -114,7 +114,7 @@ class Product
                 $query .= " WHERE pt.name = :type";
             }
 
-            $query .= " ORDER BY p.created_at DESC";
+            $query .= " ORDER BY p.name ASC";
 
             $stmt = $this->conn->prepare($query);
 
@@ -168,7 +168,7 @@ class Product
                 $query .= " AND pt.name = :type";
             }
 
-            $query .= " ORDER BY p.created_at DESC";
+            $query .= " ORDER BY p.name ASC";
 
             $stmt = $this->conn->prepare($query);
 

@@ -39,8 +39,6 @@ try {
     $totalCost = 0;
     $chartLabels = [];
     $chartRevenue = [];
-    $chartCost = [];
-    $chartProfit = [];
 
     foreach ($financials as $item) {
         $totalRevenue += (float) $item['total_revenue'];
@@ -49,8 +47,6 @@ try {
         if (count($chartLabels) < 10) {
             $chartLabels[] = $item['name'];
             $chartRevenue[] = (float) $item['total_revenue'];
-            $chartCost[] = $itemCost;
-            $chartProfit[] = $itemProfit;
         }
     }
 
