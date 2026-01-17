@@ -49,6 +49,20 @@ class ReceiveStockModal
                         class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-200 focus:border-emerald-500 outline-none transition">
                 </div>
 
+                <div class="grid grid-cols-2 gap-4">
+                    <div>
+                        <label class="block text-sm font-semibold text-gray-700 mb-2">Expiry Date</label>
+                        <input type="date" name="expiry_date" id="receive-expiry-date"
+                            class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-200 focus:border-emerald-500 outline-none transition">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-semibold text-gray-700 mb-2">Selling Price (MWK)</label>
+                        <input type="number" name="price" id="receive-price" step="0.01" min="0"
+                            placeholder="0.00"
+                            class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-200 focus:border-emerald-500 outline-none transition">
+                    </div>
+                </div>
+
 
 
                 <div>
@@ -110,6 +124,8 @@ class ReceiveStockModal
         document.getElementById('receive-product-name-display').textContent = 'Product: ' + product.name;
         document.getElementById('receive-current-stock-display').textContent = 'Current Stock: ' + product.stock + ' units';
 
+        document.getElementById('receive-expiry-date').value = product.expiry_date || '';
+        document.getElementById('receive-price').value = product.price || '';
         
         document.getElementById('receive-quantity').focus();
     };

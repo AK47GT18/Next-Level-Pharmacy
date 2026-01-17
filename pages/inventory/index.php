@@ -32,7 +32,7 @@ try {
         WHERE has_expiry = 1 
         AND expiry_date IS NOT NULL
         AND expiry_date != '0000-00-00'
-        AND expiry_date BETWEEN NOW() AND DATE_ADD(NOW(), INTERVAL 30 DAY)
+        AND expiry_date BETWEEN NOW() AND DATE_ADD(NOW(), INTERVAL 4 MONTH)
         AND is_deleted = 0
     ");
     $expiringStmt->execute();
@@ -81,6 +81,8 @@ $searchBar = new SearchBar([
     'width' => 'full',
     'variant' => 'default'
 ]);
+
+$isAdmin = ($_SESSION['role'] ?? '') === 'admin';
 ?>
 
 <div class="space-y-6" data-table-filter-container>
@@ -174,7 +176,7 @@ $searchBar = new SearchBar([
             <h3 class="text-gray-500 text-xs font-bold uppercase tracking-wide mb-1">Expiring Soon</h3>
             <p class="text-xl font-black text-purple-700"><?= $expiringCount ?></p>
             <p class="text-[10px] text-purple-600 font-medium mt-2 flex items-center gap-1">
-                <i class="fas fa-calendar-times"></i> Within 30 days
+                <i class="fas fa-calendar-times"></i> Within 4 months
             </p>
         </div>
     </div>
@@ -287,6 +289,7 @@ echo $receiveModal->render();
             document.querySelector('.search-input');
 
         let allProducts = <?= json_encode($products) ?>;
+        const isAdmin = <?= json_encode($isAdmin) ?>;
         let currentFilterType = 'all';
         let currentSearchTerm = '';
 
@@ -310,8 +313,8 @@ echo $receiveModal->render();
             const expiryDate = new Date(product.expiry_date);
             const today = new Date();
             today.setHours(0, 0, 0, 0);
-            const thirtyDaysFromNow = new Date(today.getTime() + 30 * 24 * 60 * 60 * 1000);
-            return expiryDate >= today && expiryDate <= thirtyDaysFromNow;
+            const fourMonthsFromNow = new Date(today.getTime() + 120 * 24 * 60 * 60 * 1000);
+            return expiryDate >= today && expiryDate <= fourMonthsFromNow;
         };
 
         const applyFilters = () => {
@@ -414,8 +417,10 @@ echo $receiveModal->render();
                     <td class="py-4 px-4">
                         <div class="flex gap-2 opacity-0 group-hover:opacity-100 transition">
                             <button data-action="receive" data-id="${product.id}" class="text-emerald-600 hover:text-emerald-800 transition" title="Receive Stock"><i class="fas fa-truck-loading"></i></button>
-                            <button data-action="edit" data-id="${product.id}" class="text-blue-600 hover:text-blue-800 transition" title="Edit"><i class="fas fa-edit"></i></button>
-                            <button data-action="delete" data-id="${product.id}" class="text-rose-600 hover:text-rose-800 transition" title="Delete"><i class="fas fa-trash"></i></button>
+                            ${isAdmin ? `
+                                <button data-action="edit" data-id="${product.id}" class="text-blue-600 hover:text-blue-800 transition" title="Edit"><i class="fas fa-edit"></i></button>
+                                <button data-action="delete" data-id="${product.id}" class="text-rose-600 hover:text-rose-800 transition" title="Delete"><i class="fas fa-trash"></i></button>
+                            ` : ''}
                             <button data-action="history" data-id="${product.id}" class="text-gray-500 hover:text-gray-800 transition" title="Stock History"><i class="fas fa-history"></i></button>
                         </div>
                     </td>

@@ -17,6 +17,12 @@ if (!isset($_SESSION['user_id'])) {
     exit;
 }
 
+if ($_SESSION['role'] !== 'admin') {
+    http_response_code(403);
+    echo json_encode(['status' => 'error', 'message' => 'Forbidden: Only admins can update products.']);
+    exit;
+}
+
 $userId = $_SESSION['user_id'];
 
 if (!$input || !isset($input['id'])) {

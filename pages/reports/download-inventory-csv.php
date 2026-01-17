@@ -22,7 +22,7 @@ try {
     // Build the same query as the report page
     $query = "
         SELECT 
-            p.id, p.name, c.name as category, p.stock, p.low_stock_threshold, p.cost_price, p.price
+            p.id, p.name, c.name as category, p.stock, p.low_stock_threshold, p.price
         FROM products p
         LEFT JOIN categories c ON p.category_id = c.id
         WHERE 1=1
@@ -56,7 +56,7 @@ try {
     $output = fopen('php://output', 'w');
 
     // Add CSV header row
-    fputcsv($output, ['Product ID', 'Product Name', 'Category', 'Stock', 'Low Stock Threshold', 'Cost Price (MWK)', 'Selling Price (MWK)']);
+    fputcsv($output, ['Product ID', 'Product Name', 'Category', 'Stock', 'Low Stock Threshold', 'Selling Price (MWK)']);
 
     // Add data rows
     foreach ($products as $product) {

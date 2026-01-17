@@ -45,13 +45,19 @@ try {
     $oldStock = (int) $currentProduct['stock'];
     $newStock = $oldStock + $receivedQty;
 
-    // Update product stock and optionally cost price
-    $query = "UPDATE products SET stock = :stock, updated_at = NOW()";
+    // Update product stock, expiry date and selling price
+    $query = "UPDATE products SET stock = :stock, expiry_date = :expiry_date, price = :price, updated_at = NOW()";
 
     $query .= " WHERE id = :id";
 
     $stmt = $db->prepare($query);
     $stmt->bindParam(':stock', $newStock, PDO::PARAM_INT);
+
+    $expiry_date = !empty($input['expiry_date']) ? $input['expiry_date'] : $currentProduct['expiry_date'];
+    $price = !empty($input['price']) ? $input['price'] : $currentProduct['price'];
+
+    $stmt->bindParam(':expiry_date', $expiry_date);
+    $stmt->bindParam(':price', $price);
     $stmt->bindParam(':id', $productId, PDO::PARAM_INT);
 
 
