@@ -27,11 +27,6 @@ if (empty($email) || empty($password)) {
     exit;
 }
 
-if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
-    http_response_code(400);
-    echo json_encode(['status' => 'error', 'message' => 'Invalid email format.']);
-    exit;
-}
 
 try {
     $db = Database::getInstance()->getConnection();

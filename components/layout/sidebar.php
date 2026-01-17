@@ -3,11 +3,24 @@ class Sidebar
 {
     private array $menuItems;
     private string $currentPage;
+    private ?array $user = null;
 
     public function __construct(string $currentPage = 'dashboard')
     {
         $this->currentPage = $currentPage;
         $this->menuItems = $this->getMenuItems();
+        $this->user = $this->loadUser();
+    }
+
+    private function loadUser(): ?array
+    {
+        if (isset($_SESSION['user_id'])) {
+            require_once __DIR__ . '/../../classes/User.php';
+            require_once __DIR__ . '/../../config/database.php';
+            $db = Database::getInstance()->getConnection();
+            return (new User($db))->getById($_SESSION['user_id']);
+        }
+        return null;
     }
 
     private function getMenuItems(): array
@@ -100,11 +113,14 @@ class Sidebar
 
     private function renderUserProfile(): string
     {
+        if (!$this->user)
+            return '';
+
         // Construct the URL outside the HEREDOC string to ensure it's correctly processed by PHP.
         $userProfileUrl = PathHelper::page('settings', ['view' => 'user-profile']);
 
-        $userName = $_SESSION['user_name'] ?? 'Admin User';
-        $userRole = $_SESSION['role'] ?? 'Super Admin';
+        $userName = htmlspecialchars($this->user['name'] ?? 'User');
+        $userRole = htmlspecialchars($this->user['role'] ?? 'Staff');
         $avatarUrl = "https://ui-avatars.com/api/?name=" . urlencode($userName) . "&background=3b82f6&color=fff&bold=true";
 
         return <<<HTML
