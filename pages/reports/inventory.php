@@ -1,182 +1,378 @@
 <?php
-// filepath: pages/reports/inventory.php
-require_once __DIR__ . "/../../includes/check-auth.php";
-require_once __DIR__ . "/../../config/database.php";
+// filepath: c:\xampp5\htdocs\Next-Level\rxpms\pages\reports\inventory.php
+
+require_once __DIR__ . '/../../includes/check-auth.php';
+require_once __DIR__ . '/../../config/database.php';
 
 try {
-    $db = Database::getInstance(); $conn = $db->getConnection();
-    $page = max(1, intval($_GET["p"] ?? 1)); $perPage = 15; $offset = ($page - 1) * $perPage;
-    $catId = $_GET["category"] ?? ""; $stockType = $_GET["stock_level"] ?? "";
-    
-    $where = " WHERE 1=1"; $countP = [];
-    if($catId){ $where .= " AND p.category_id = ?"; $countP[] = $catId; }
-    if($stockType=="low"){ $where .= " AND p.stock > 0 AND p.stock <= p.low_stock_threshold"; }
-    elseif($stockType=="out"){ $where .= " AND p.stock = 0"; }
-    
-    $countStmt = $conn->prepare("SELECT COUNT(*) FROM products p $where"); $countStmt->execute($countP);
-    $totalRecords = (int)$countStmt->fetchColumn(); $totalPages = max(1, ceil($totalRecords / $perPage));
-    $page = min($page, $totalPages); $offset = ($page - 1) * $perPage;
-    
-    // Fixed Parameterized Pagination
-    $query = "SELECT p.*, c.name as category_name FROM products p LEFT JOIN categories c ON p.category_id = c.id $where ORDER BY p.name ASC LIMIT " . (int)$perPage . " OFFSET " . (int)$offset;
-    $stmt = $conn->prepare($query); $stmt->execute($countP); 
+    $db = Database::getInstance();
+    $conn = $db->getConnection();
+
+    // Get filter parameters
+    $categoryFilter = $_GET['category'] ?? '';
+    $stockFilter = $_GET['stock_level'] ?? '';
+
+    // Build query with filters
+    $query = "
+        SELECT 
+            p.id, 
+            p.name, 
+            p.stock,
+            p.low_stock_threshold,
+            p.price,
+            c.id as category_id,
+            c.name as category
+        FROM products p
+        LEFT JOIN categories c ON p.category_id = c.id
+        WHERE 1=1
+    ";
+
+    $params = [];
+
+    if ($categoryFilter) {
+        $query .= " AND p.category_id = ?";
+        $params[] = $categoryFilter;
+    }
+
+    if ($stockFilter === 'low') {
+        $query .= " AND p.stock > 0 AND p.stock <= p.low_stock_threshold";
+    } elseif ($stockFilter === 'out') {
+        $query .= " AND p.stock = 0";
+    } elseif ($stockFilter === 'normal') {
+        $query .= " AND p.stock > p.low_stock_threshold";
+    }
+
+    $query .= " ORDER BY p.name ASC";
+
+    $stmt = $conn->prepare($query);
+    $stmt->execute($params);
     $products = $stmt->fetchAll(PDO::FETCH_ASSOC);
-    $categories = $conn->query("SELECT * FROM categories ORDER BY name ASC")->fetchAll(PDO::FETCH_ASSOC);
 
-    // Stats Logic
-    $totalStockValue = $conn->query("SELECT SUM(stock * price) FROM products")->fetchColumn() ?? 0;
-    $lowStockItems = (int)$conn->query("SELECT COUNT(*) FROM products WHERE stock > 0 AND stock <= low_stock_threshold")->fetchColumn();
-    $outOfStockItems = (int)$conn->query("SELECT COUNT(*) FROM products WHERE stock = 0")->fetchColumn();
-    $safeStockItems = (int)$conn->query("SELECT COUNT(*) FROM products WHERE stock > low_stock_threshold")->fetchColumn();
+    // Calculate statistics
+    $totalItems = count($products);
+    $lowStockItems = 0;
+    $outOfStockItems = 0;
+    $stockValue = 0;
 
-    $statusLabels = ["Safe", "Low", "Empty"];
-    $statusCounts = [$safeStockItems, $lowStockItems, $outOfStockItems];
-    $catValueData = $conn->query("SELECT c.name, SUM(p.stock * p.price) as total_val FROM products p JOIN categories c ON p.category_id = c.id GROUP BY c.id ORDER BY total_val DESC LIMIT 5")->fetchAll(PDO::FETCH_ASSOC);
-    $catLabels = []; $catValues = [];
-    foreach($catValueData as $cv) { $catLabels[] = $cv['name']; $catValues[] = (float)$cv['total_val']; }
+    foreach ($products as $product) {
+        if ((int) $product['stock'] <= 0) {
+            $outOfStockItems++;
+        } elseif ((int) $product['stock'] <= (int) $product['low_stock_threshold']) {
+            $lowStockItems++;
+        }
+        $stockValue += (float) ($product['price'] ?? 0) * (int) $product['stock'];
+    }
 
-} catch (Exception $e) { die("<div class='p-12 text-center bg-rose-50 text-rose-600 rounded-3xl font-black italic'>Error initializing inventory insights.</div>"); }
+    // Get all categories for filter dropdown
+    $categoriesStmt = $conn->query("SELECT id, name FROM categories ORDER BY name ASC");
+    $categories = $categoriesStmt->fetchAll(PDO::FETCH_ASSOC);
+
+    // Get low stock items (top 6 for alerts)
+    $lowStockQuery = "
+        SELECT id, name, stock, low_stock_threshold 
+        FROM products 
+        WHERE stock > 0 AND stock <= low_stock_threshold 
+        ORDER BY stock ASC 
+        LIMIT 6
+    ";
+    $lowStockAlerts = $conn->query($lowStockQuery)->fetchAll(PDO::FETCH_ASSOC);
+
+    // Get stock by category for chart
+    $categoryStatsQuery = "
+        SELECT c.name as category, COUNT(p.id) as count
+        FROM products p
+        LEFT JOIN categories c ON p.category_id = c.id
+        GROUP BY c.id, c.name
+        ORDER BY count DESC
+    ";
+    $categoryStats = $conn->query($categoryStatsQuery)->fetchAll(PDO::FETCH_ASSOC);
+
+} catch (Exception $e) {
+    error_log('Inventory Report Error: ' . $e->getMessage());
+    echo "<div class='p-4 bg-rose-100 border border-rose-200 rounded-lg text-rose-800'>";
+    echo "<strong>Error:</strong> " . htmlspecialchars($e->getMessage());
+    echo "</div>";
+    exit;
+}
 ?>
 
-<div class="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500 pb-10">
-    <div class="flex items-center justify-between pb-2">
-        <div class="flex items-center gap-4">
-            <a href="?page=reports" class="w-10 h-10 bg-slate-900 text-white rounded-xl flex items-center justify-center hover:bg-black transition-all shadow-xl shadow-slate-900/10"><i class="fas fa-arrow-left"></i></a>
-            <div>
-                <h1 class="text-2xl font-black text-slate-900 tracking-tight">Inventory Insights</h1>
-                <p class="text-sm font-medium text-slate-400">Stock distribution and asset valuation.</p>
-            </div>
+<div class="space-y-6">
+    <!-- Header -->
+    <div class="flex items-center justify-between">
+        <div>
+            <h1 class="text-2xl font-bold text-gray-900">Inventory Report</h1>
+            <p class="text-gray-500">Monitor your stock levels and movement</p>
         </div>
         <div class="flex items-center gap-3">
-            <button onclick="window.location.href = 'api/reports/download.php?report=inventory'" class="px-6 py-2.5 bg-blue-600 text-white rounded-xl font-bold flex items-center gap-2 hover:bg-blue-700 transition-all shadow-lg shadow-blue-500/20 shadow-sm"><i class="fas fa-file-export"></i> Export</button>
-            <div class="px-5 py-2 bg-emerald-50 border border-emerald-100 rounded-2xl">
-                <p class="text-[10px] font-black text-emerald-600 uppercase tracking-widest leading-none mb-1">Total Valuation</p>
-                <h4 class="text-lg font-black text-slate-800">MWK <?= number_format($totalStockValue, 0) ?></h4>
+            <a href="?page=reports"
+                class="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-all">
+                <i class="fas fa-arrow-left mr-2"></i>Back to Reports
+            </a>
+            <a href="<?php echo defined('BASE_URL') ? BASE_URL : '/Next-Level/rxpms'; ?>/api/reports/download.php?report=inventory"
+                class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-all">
+                <i class="fas fa-download mr-2"></i>Export CSV
+            </a>
+        </div>
+    </div>
+
+    <!-- Stats Cards -->
+    <div class="grid grid-cols-1 md:grid-cols-4 gap-6">
+        <div class="glassmorphism rounded-2xl p-6">
+            <h3 class="text-sm font-semibold text-gray-600 mb-2">Total Items</h3>
+            <p class="text-3xl font-bold text-gray-900"><?= number_format($totalItems) ?></p>
+            <div class="flex items-center gap-1 text-sm mt-1 text-gray-500">
+                <span class="text-gray-500">items in inventory</span>
+            </div>
+        </div>
+
+        <div class="glassmorphism rounded-2xl p-6">
+            <h3 class="text-sm font-semibold text-gray-600 mb-2">Low Stock Items</h3>
+            <p class="text-3xl font-bold text-amber-600"><?= number_format($lowStockItems) ?></p>
+            <div class="flex items-center gap-1 text-sm mt-1 text-gray-500">
+                <span class="text-gray-500">items need reorder</span>
+            </div>
+        </div>
+
+        <div class="glassmorphism rounded-2xl p-6">
+            <h3 class="text-sm font-semibold text-gray-600 mb-2">Out of Stock</h3>
+            <p class="text-3xl font-bold text-rose-600"><?= number_format($outOfStockItems) ?></p>
+            <div class="flex items-center gap-1 text-sm mt-1 text-gray-500">
+                <span class="text-gray-500">items out of stock</span>
+            </div>
+        </div>
+
+        <div class="glassmorphism rounded-2xl p-6">
+            <h3 class="text-sm font-semibold text-gray-600 mb-2">Stock Value</h3>
+            <p class="text-3xl font-bold text-gray-900">MWK <?= number_format($stockValue, 2) ?></p>
+            <div class="flex items-center gap-1 text-sm mt-1 text-gray-500">
+                <span class="text-gray-500">total inventory value</span>
             </div>
         </div>
     </div>
 
-    <!-- Enhanced Filter Bar -->
-    <div class="glassmorphism p-3 rounded-[24px] border border-white/40 shadow-sm bg-gradient-to-r from-blue-500/5 to-transparent">
-        <form method="GET" class="flex flex-wrap items-end gap-x-6 gap-y-4 p-2">
-            <input type="hidden" name="page" value="reports">
-            <input type="hidden" name="view" value="inventory">
-            <div class="flex-1 min-w-[200px]">
-                <label class="text-[10px] uppercase font-black text-slate-500 mb-1.5 ml-1 flex items-center gap-1.5"><i class="fas fa-tags text-blue-500/60"></i> Category</label>
-                <select name="category" class="w-full bg-white border-2 border-slate-100 rounded-2xl px-4 py-2.5 text-sm font-bold text-slate-700 focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 transition-all">
-                    <option value="">All Categories</option>
-                    <?php foreach($categories as $c): ?><option value="<?= $c["id"] ?>" <?= $catId==$c["id"]?"selected":""?>><?= htmlspecialchars($c["name"])?></option><?php endforeach; ?>
-                </select>
-            </div>
-            <div class="flex-1 min-w-[200px]">
-                <label class="text-[10px] uppercase font-black text-slate-500 mb-1.5 ml-1 flex items-center gap-1.5"><i class="fas fa-layer-group text-blue-500/60"></i> Stock Status</label>
-                <select name="stock_level" class="w-full bg-white border-2 border-slate-100 rounded-2xl px-4 py-2.5 text-sm font-bold text-slate-700 focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 transition-all">
-                    <option value="">All Inventory</option>
-                    <option value="low" <?= $stockType=="low"?"selected":""?>>Low Stock Only</option>
-                    <option value="out" <?= $stockType=="out"?"selected":""?>>Out of Stock Only</option>
-                </select>
-            </div>
-            <button type="submit" class="bg-blue-600 hover:bg-blue-700 text-white px-10 py-3 rounded-2xl font-black text-sm transition-all shadow-xl shadow-blue-500/20">Refresh List</button>
-        </form>
-    </div>
-
-    <!-- Charts Section -->
+    <!-- Charts -->
     <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-        <div class="glassmorphism p-8 rounded-[32px] border border-white/40 shadow-sm bg-white min-h-[350px] flex flex-col items-center">
-            <h3 class="text-sm font-black text-slate-900 uppercase tracking-widest mb-8">Stock Level Distribution</h3>
-            <div class="w-full h-[240px]"><canvas id="statusDoughnut"></canvas></div>
+        <div class="glassmorphism rounded-2xl p-6">
+            <h3 class="text-lg font-bold text-gray-900 mb-4">Stock by Category</h3>
+            <canvas id="categoryChart" height="300"></canvas>
         </div>
-        <div class="glassmorphism p-8 rounded-[32px] border border-white/40 shadow-sm bg-white min-h-[350px]">
-             <h3 class="text-sm font-black text-slate-900 uppercase tracking-widest mb-8">Asset Value by Category</h3>
-            <div class="w-full h-[240px]"><canvas id="categoryValueBar"></canvas></div>
+
+        <div class="glassmorphism rounded-2xl p-6">
+            <h3 class="text-lg font-bold text-gray-900 mb-4">Stock Status Distribution</h3>
+            <canvas id="statusChart" height="300"></canvas>
         </div>
     </div>
+
+    <!-- Low Stock Alerts -->
+    <?php if (!empty($lowStockAlerts)): ?>
+        <div class="glassmorphism rounded-2xl p-6">
+            <div class="flex items-center justify-between mb-6">
+                <h3 class="text-lg font-bold text-gray-900">Low Stock Alerts</h3>
+                <a href="?page=reports&view=inventory&stock_level=low"
+                    class="px-4 py-2 text-amber-600 bg-amber-50 rounded-xl text-sm font-semibold hover:bg-amber-100 transition-all">
+                    View All
+                </a>
+            </div>
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <?php foreach ($lowStockAlerts as $item): ?>
+                    <div class="p-4 bg-amber-50 border border-amber-200 rounded-xl">
+                        <div class="flex items-center justify-between">
+                            <h4 class="font-semibold text-gray-800"><?= htmlspecialchars($item['name']) ?></h4>
+                            <span class="text-xs font-bold text-amber-700 px-2 py-1 bg-amber-200 rounded-full">LOW</span>
+                        </div>
+                        <div class="flex items-baseline gap-2 mt-2">
+                            <p class="text-2xl font-bold text-gray-900"><?= $item['stock'] ?></p>
+                            <p class="text-sm text-gray-500">/ <?= $item['low_stock_threshold'] ?> units</p>
+                        </div>
+                        <div class="w-full bg-gray-200 rounded-full h-2 mt-2">
+                            <?php
+                            $percentage = ($item['stock'] / $item['low_stock_threshold']) * 100;
+                            $barColor = $percentage < 50 ? 'bg-rose-500' : 'bg-amber-500';
+                            ?>
+                            <div class="<?= $barColor ?> h-2 rounded-full" style="width: <?= min($percentage, 100) ?>%"></div>
+                        </div>
+                    </div>
+                <?php endforeach; ?>
+            </div>
+        </div>
+    <?php endif; ?>
 
     <!-- Inventory Table -->
-    <div class="glassmorphism rounded-[32px] border border-white/40 shadow-sm overflow-hidden bg-white">
-        <table class="w-full">
-            <thead>
-                <tr class="bg-slate-50/50 text-left">
-                    <th class="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Product Description</th>
-                    <th class="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Category</th>
-                    <th class="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest text-center">Status</th>
-                    <th class="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest text-right">Unit Price</th>
-                </tr>
-            </thead>
-            <tbody class="divide-y divide-slate-50">
-                <?php foreach($products as $p): ?>
-                    <tr class="hover:bg-slate-50/40 transition-colors">
-                        <td class="px-6 py-4">
-                            <p class="font-black text-slate-900 tracking-tight"><?= htmlspecialchars($p["name"]) ?></p>
-                            <p class="text-[10px] font-bold text-slate-400 uppercase mt-0.5">SKU: <?= str_pad($p["id"]??0, 6, '0', STR_PAD_LEFT) ?></p>
-                        </td>
-                        <td class="px-6 py-4"><span class="text-xs font-bold text-slate-500 bg-slate-100 px-3 py-1 rounded-full"><?= htmlspecialchars($p["category_name"]??"General") ?></span></td>
-                        <td class="px-6 py-4 text-center">
-                            <span class="px-3 py-1 rounded-xl text-[11px] font-black <?= $p['stock'] == 0 ? 'bg-rose-100 text-rose-600' : ($p['stock'] <= $p['low_stock_threshold'] ? 'bg-amber-100 text-amber-600' : 'bg-emerald-100 text-emerald-600') ?>">
-                                <?= $p["stock"] ?> available
-                            </span>
-                        </td>
-                        <td class="px-6 py-4 text-right font-black text-slate-900">MWK <?= number_format($p["price"], 2) ?></td>
+    <div class="glassmorphism rounded-2xl p-6">
+        <div class="flex items-center justify-between mb-6">
+            <h3 class="text-lg font-bold text-gray-900">Inventory List</h3>
+            <form method="GET" class="flex items-center gap-3">
+                <input type="hidden" name="page" value="reports">
+                <input type="hidden" name="view" value="inventory">
+
+                <select name="category"
+                    class="rounded-xl border-gray-300 text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent">
+                    <option value="">All Categories</option>
+                    <?php foreach ($categories as $cat): ?>
+                        <option value="<?= $cat['id'] ?>" <?= $categoryFilter == $cat['id'] ? 'selected' : '' ?>>
+                            <?= htmlspecialchars($cat['name']) ?>
+                        </option>
+                    <?php endforeach; ?>
+                </select>
+
+                <select name="stock_level"
+                    class="rounded-xl border-gray-300 text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent">
+                    <option value="">All Stock Levels</option>
+                    <option value="low" <?= $stockFilter === 'low' ? 'selected' : '' ?>>Low Stock</option>
+                    <option value="out" <?= $stockFilter === 'out' ? 'selected' : '' ?>>Out of Stock</option>
+                    <option value="normal" <?= $stockFilter === 'normal' ? 'selected' : '' ?>>Normal</option>
+                </select>
+
+                <button type="submit"
+                    class="px-4 py-2 bg-blue-600 text-white rounded-xl text-sm font-semibold hover:bg-blue-700 transition-all">
+                    <i class="fas fa-filter mr-1"></i>Apply
+                </button>
+
+                <?php if ($categoryFilter || $stockFilter): ?>
+                    <a href="?page=reports&view=inventory"
+                        class="px-4 py-2 bg-gray-100 text-gray-700 rounded-xl text-sm font-semibold hover:bg-gray-200 transition-all">
+                        <i class="fas fa-times mr-1"></i>Clear
+                    </a>
+                <?php endif; ?>
+            </form>
+        </div>
+
+        <div class="overflow-x-auto">
+            <table class="min-w-full divide-y divide-gray-200">
+                <thead class="bg-gray-50">
+                    <tr>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                            Product Name</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                            Category</th>
+                        <th class="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
+                            Stock Level</th>
+                        <th class="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
+                            Threshold</th>
+                        <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                            Value</th>
+                        <th class="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
+                            Status</th>
                     </tr>
-                <?php endforeach; ?>
-            </tbody>
-        </table>
-        
-        <!-- Smart Pagination -->
-        <?php if ($totalPages > 1): ?>
-            <div class="p-6 border-t border-slate-50 flex items-center justify-between bg-slate-50/30">
-                <div class="text-xs font-black text-slate-400">
-                    Showing <?= (($page - 1) * $perPage) + 1 ?> - <?= min($page * $perPage, $totalRecords) ?> of <?= number_format($totalRecords) ?> products
-                </div>
-                <div class="flex items-center gap-2">
-                    <?php 
-                    $range = 2;
-                    $start = max(1, $page - $range);
-                    $end = min($totalPages, $page + $range);
-                    
-                    // First button
-                    if ($page > 1): ?>
-                        <a href="?<?= http_build_query(array_merge($_GET, ['p' => 1])) ?>" class="w-10 h-10 flex items-center justify-center rounded-xl font-black text-xs bg-white border-2 border-slate-100 text-slate-400 hover:text-blue-600 hover:border-blue-200 transition-all">
-                            <i class="fas fa-angle-double-left text-[10px]"></i>
-                        </a>
+                </thead>
+                <tbody class="bg-white divide-y divide-gray-200">
+                    <?php if (empty($products)): ?>
+                        <tr>
+                            <td colspan="6" class="px-6 py-12 text-center text-gray-500">
+                                <i class="fas fa-box-open text-4xl text-gray-300 mb-3"></i>
+                                <p class="text-lg font-medium">No products found</p>
+                                <p class="text-sm">Try adjusting your filters</p>
+                            </td>
+                        </tr>
+                    <?php else: ?>
+                        <?php foreach ($products as $product): ?>
+                            <?php
+                            $statusBadge = '';
+                            if ($product['stock'] <= 0) {
+                                $statusBadge = '<span class="px-2.5 py-1 inline-flex text-xs leading-5 font-semibold rounded-full bg-rose-100 text-rose-800"><i class="fas fa-times-circle mr-1"></i>Out of Stock</span>';
+                            } elseif ($product['stock'] <= $product['low_stock_threshold']) {
+                                $statusBadge = '<span class="px-2.5 py-1 inline-flex text-xs leading-5 font-semibold rounded-full bg-amber-100 text-amber-800"><i class="fas fa-exclamation-triangle mr-1"></i>Low Stock</span>';
+                            } else {
+                                $statusBadge = '<span class="px-2.5 py-1 inline-flex text-xs leading-5 font-semibold rounded-full bg-emerald-100 text-emerald-800"><i class="fas fa-check-circle mr-1"></i>In Stock</span>';
+                            }
+                            $itemValue = ($product['price'] ?? 0) * $product['stock'];
+                            ?>
+                            <tr class="hover:bg-gray-50 transition-colors">
+                                <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                                    <?= htmlspecialchars($product['name']) ?>
+                                </td>
+                                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                                    <span class="px-2 py-1 bg-blue-50 text-blue-700 rounded-lg text-xs font-medium">
+                                        <?= htmlspecialchars($product['category'] ?? 'Uncategorized') ?>
+                                    </span>
+                                </td>
+                                <td class="px-6 py-4 whitespace-nowrap text-sm text-center">
+                                    <span class="text-lg font-bold text-gray-900"><?= $product['stock'] ?></span>
+                                </td>
+                                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500 text-center">
+                                    <?= $product['low_stock_threshold'] ?>
+                                </td>
+                                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900 font-semibold text-right">
+                                    MWK <?= number_format($itemValue, 2) ?>
+                                </td>
+                                <td class="px-6 py-4 whitespace-nowrap text-sm text-center">
+                                    <?= $statusBadge ?>
+                                </td>
+                            </tr>
+                        <?php endforeach; ?>
                     <?php endif; ?>
-                    
-                    <!-- Prev button -->
-                    <?php if ($page > 1): ?>
-                        <a href="?<?= http_build_query(array_merge($_GET, ['p' => $page - 1])) ?>" class="w-10 h-10 flex items-center justify-center rounded-xl font-black text-xs bg-white border-2 border-slate-100 text-slate-400 hover:text-blue-600 hover:border-blue-200 transition-all">
-                            <i class="fas fa-chevron-left text-[10px]"></i>
-                        </a>
-                    <?php endif; ?>
-                    
-                    <?php for($i = $start; $i <= $end; $i++): ?>
-                        <a href="?<?= http_build_query(array_merge($_GET, ['p' => $i])) ?>" class="w-10 h-10 flex items-center justify-center rounded-xl font-black text-xs transition-all <?= $i === $page ? 'bg-blue-600 text-white shadow-lg shadow-blue-500/30' : 'bg-white border-2 border-slate-100 text-slate-400 hover:text-blue-600 hover:border-blue-200' ?>">
-                            <?= $i ?>
-                        </a>
-                    <?php endfor; ?>
-                    
-                    <!-- Next button -->
-                    <?php if ($page < $totalPages): ?>
-                        <a href="?<?= http_build_query(array_merge($_GET, ['p' => $page + 1])) ?>" class="w-10 h-10 flex items-center justify-center rounded-xl font-black text-xs bg-white border-2 border-slate-100 text-slate-400 hover:text-blue-600 hover:border-blue-200 transition-all">
-                            <i class="fas fa-chevron-right text-[10px]"></i>
-                        </a>
-                    <?php endif; ?>
-                    
-                    <!-- Last button -->
-                    <?php if ($page < $totalPages): ?>
-                        <a href="?<?= http_build_query(array_merge($_GET, ['p' => $totalPages])) ?>" class="w-10 h-10 flex items-center justify-center rounded-xl font-black text-xs bg-white border-2 border-slate-100 text-slate-400 hover:text-blue-600 hover:border-blue-200 transition-all">
-                            <i class="fas fa-angle-double-right text-[10px]"></i>
-                        </a>
-                    <?php endif; ?>
-                </div>
-            </div>
-        <?php endif; ?>
+                </tbody>
+            </table>
+        </div>
     </div>
 </div>
 
-<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 <script>
-document.addEventListener("DOMContentLoaded", () => {
-    new Chart(document.getElementById("statusDoughnut"), { type: 'doughnut', data: { labels: <?= json_encode($statusLabels) ?>, datasets: [{ data: <?= json_encode($statusCounts) ?>, backgroundColor: ['#10b981', '#f59e0b', '#ef4444'], borderWidth: 0 }] }, options: { cutout: '75%', responsive: true, maintainAspectRatio: false } });
-    new Chart(document.getElementById("categoryValueBar"), { type: 'bar', data: { labels: <?= json_encode($catLabels) ?>, datasets: [{ data: <?= json_encode($catValues) ?>, backgroundColor: '#3b82f6', borderRadius: 12 }] }, options: { indexAxis: 'y', responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } } } });
-});
+    document.addEventListener('DOMContentLoaded', function () {
+        if (typeof Chart === 'undefined') {
+            console.error('Chart.js not loaded');
+            return;
+        }
+
+        // Category Chart
+        const categoryCategoryStats = <?= json_encode($categoryStats) ?>;
+        if (categoryCategoryStats.length > 0) {
+            const categoryCtx = document.getElementById('categoryChart');
+            if (categoryCtx) {
+                new Chart(categoryCtx, {
+                    type: 'doughnut',
+                    data: {
+                        labels: categoryCategoryStats.map(s => s.category),
+                        datasets: [{
+                            data: categoryCategoryStats.map(s => s.count),
+                            backgroundColor: ['#3b82f6', '#8b5cf6', '#10b981', '#f59e0b', '#64748b', '#ec4899', '#14b8a6'],
+                            borderWidth: 0
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: true,
+                        cutout: '70%',
+                        plugins: {
+                            legend: {
+                                position: 'bottom',
+                                labels: { padding: 15, font: { size: 12 } }
+                            }
+                        }
+                    }
+                });
+            }
+        }
+
+        // Status Distribution Chart
+        const statusCtx = document.getElementById('statusChart');
+        if (statusCtx) {
+            const inStock = <?= $totalItems - $lowStockItems - $outOfStockItems ?>;
+            const lowStock = <?= $lowStockItems ?>;
+            const outOfStock = <?= $outOfStockItems ?>;
+
+            new Chart(statusCtx, {
+                type: 'pie',
+                data: {
+                    labels: ['In Stock', 'Low Stock', 'Out of Stock'],
+                    datasets: [{
+                        data: [inStock, lowStock, outOfStock],
+                        backgroundColor: ['#10b981', '#f59e0b', '#ef4444'],
+                        borderWidth: 0
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: true,
+                    plugins: {
+                        legend: {
+                            position: 'bottom',
+                            labels: { padding: 15, font: { size: 12 } }
+                        }
+                    }
+                }
+            });
+        }
+    });
 </script>
