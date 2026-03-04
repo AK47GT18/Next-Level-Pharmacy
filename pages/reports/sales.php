@@ -57,16 +57,12 @@ try {
     if ($paymentMethod !== 'all') { $query .= " AND COALESCE(p.payment_method,'cash') = ?"; $params[] = $paymentMethod; }
     if ($saleIdSearch !== null)   { $query .= " AND s.id = ?";                              $params[] = $saleIdSearch; }
     if ($dayFilter !== '')        { $query .= " AND DAYNAME(s.created_at) = ?";             $params[] = $dayFilter; }
-    $query .= " ORDER BY s.created_at DESC LIMIT :limit OFFSET :offset";
+    $query .= " ORDER BY s.created_at DESC LIMIT ? OFFSET ?";
+    $params[] = $perPage;
+    $params[] = $offset;
 
-    $stmt = $conn->prepare($query);
-    // Bind the regular filters positionally first
-    foreach ($params as $i => $val) {
-        $stmt->bindValue($i + 1, $val);
-    }
-    $stmt->bindValue(':limit',  $perPage, PDO::PARAM_INT);
-    $stmt->bindValue(':offset', $offset,  PDO::PARAM_INT);
-    $stmt->execute();
+    $stmt  = $conn->prepare($query);
+    $stmt->execute($params);
     $sales = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
     // ── TOTALS (full filtered set) ────────────────────────────────────────
@@ -125,11 +121,9 @@ try {
     exit;
 }
 
-if (!function_exists("pgUrl")) {
 function pgUrl(int $pg): string {
     $p = $_GET; $p['pg'] = $pg;
     return '?' . http_build_query($p);
-}
 }
 ?>
 
@@ -351,7 +345,7 @@ function pgUrl(int $pg): string {
                 <thead class="bg-gray-50">
                     <tr>
                         <th class="px-5 py-4 text-left   text-xs font-semibold text-gray-500 uppercase tracking-wider whitespace-nowrap">Sale ID</th>
-                        <th class="px-5 py-4 text-left   text-xs font-semibold text-gray-500 uppercase tracking-wider whitespace-nowrap">Date &amp; Time</th>
+                        <th class="px-5 py-4 text-left   text-xs font-semibold text-gray-500 uppercase tracking-wider whitespace-nowrap">Date & Time</th>
                         <th class="px-5 py-4 text-left   text-xs font-semibold text-gray-500 uppercase tracking-wider whitespace-nowrap">Cashier</th>
                         <th class="px-5 py-4 text-center text-xs font-semibold text-gray-500 uppercase tracking-wider whitespace-nowrap">Items</th>
                         <th class="px-5 py-4 text-left   text-xs font-semibold text-gray-500 uppercase tracking-wider whitespace-nowrap">Payment</th>
