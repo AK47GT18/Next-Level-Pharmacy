@@ -1,5 +1,4 @@
 <?php
-// filepath: c:\xampp5\htdocs\Next-Level\rxpms\pages\reports\sales.php
 
 require_once __DIR__ . '/../../includes/check-auth.php';
 require_once __DIR__ . '/../../config/database.php';
