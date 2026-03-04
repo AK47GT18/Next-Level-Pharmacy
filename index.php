@@ -225,15 +225,17 @@ if (!$isAdmin && in_array($currentPage, $restrictedPages)) {
 	<?= PathHelper::loadJS('assets/js/main.js', true) ?>
 
 	<script>
-		document.addEventListener('DOMContentLoaded', () => {
-			// Hide loader once content is loaded
+		function hideLoader() {
 			const loader = document.getElementById('heart-loader');
 			if (loader) {
-				setTimeout(() => {
-					loader.classList.add('opacity-0');
-					setTimeout(() => loader.style.display = 'none', 500);
-				}, 300); // Artificial delay to ensure loader is visible
+				loader.classList.add('opacity-0');
+				setTimeout(() => loader.style.display = 'none', 500);
 			}
+		}
+
+		document.addEventListener('DOMContentLoaded', () => {
+			// Hide loader once content is loaded
+			hideLoader();
 
 			// --- Generic Dropdown Toggle Logic (for notification bell) ---
 			document.addEventListener('click', function (e) {
@@ -249,7 +251,20 @@ if (!$isAdmin && in_array($currentPage, $restrictedPages)) {
 				}
 			});
 		});
-	</script>
+
+		// Fallback: Always hide loader after 5 seconds regardless of page load status
+		setTimeout(hideLoader, 5000);
+
+		// Fallback: Hide loader on first user interaction
+		document.addEventListener('click', hideLoader, { once: true });
+		document.addEventListener('scroll', hideLoader, { once: true });
+
+		// Log any JavaScript errors that might prevent loader hiding
+		window.onerror = function(msg, url, lineNo, columnNo, error) {
+			console.error('JavaScript Error: ', msg, ' at line ', lineNo);
+			hideLoader();
+			return false;
+		};
 </body>
 
 </html>
