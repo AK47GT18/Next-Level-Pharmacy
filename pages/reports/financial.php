@@ -1,173 +1,288 @@
 <?php
-// filepath: pages/reports/financial.php
-require_once __DIR__ . "/../../includes/check-auth.php";
-require_once __DIR__ . "/../../config/database.php";
+// filepath: c:\xampp5\htdocs\Next-Level\rxpms\pages\reports\financial.php
+
+require_once __DIR__ . '/../../includes/check-auth.php';
+require_once __DIR__ . '/../../config/database.php';
 
 try {
-    $db = Database::getInstance(); $conn = $db->getConnection();
-    $page = max(1, intval($_GET["p"] ?? 1)); $perPage = 15; $offset = ($page - 1) * $perPage;
-    $startDate = $_GET["start_date"] ?? date("Y-m-01"); $endDate = $_GET["end_date"] ?? date("Y-m-t");
-    
-    $countStmt = $conn->prepare("SELECT COUNT(DISTINCT si.product_id) FROM sale_items si JOIN sales s ON si.sale_id = s.id WHERE DATE(s.created_at) BETWEEN ? AND ?");
-    $countStmt->execute([$startDate, $endDate]); 
-    $totalRecords = (int)$countStmt->fetchColumn(); 
-    $totalPages = max(1, ceil($totalRecords/$perPage));
-    $page = min($page, $totalPages); $offset = ($page - 1) * $perPage;
-    
-    // Fixed Parameterized Pagination
-    $perfQuery = "SELECT p.name, SUM(si.quantity) as units_sold, SUM(si.total) as revenue, AVG(si.price_at_sale) as avg_price FROM sale_items si JOIN products p ON si.product_id = p.id JOIN sales s ON si.sale_id = s.id WHERE DATE(s.created_at) BETWEEN ? AND ? GROUP BY p.id, p.name ORDER BY revenue DESC LIMIT " . (int)$perPage . " OFFSET " . (int)$offset;
-    $perfStmt = $conn->prepare($perfQuery); 
-    $perfStmt->execute([$startDate, $endDate]); 
-    $products = $perfStmt->fetchAll(PDO::FETCH_ASSOC);
+    $db = Database::getInstance();
+    $conn = $db->getConnection();
 
-    $summaryStmt = $conn->prepare("SELECT SUM(total) as revenue, COUNT(DISTINCT sale_id) as sales_count FROM sale_items si JOIN sales s ON si.sale_id = s.id WHERE DATE(s.created_at) BETWEEN ? AND ?");
-    $summaryStmt->execute([$startDate, $endDate]);
-    $summary = $summaryStmt->fetch(PDO::FETCH_ASSOC);
-    $totalRevenue = (float)($summary["revenue"] ?? 0);
-    $totalSales = (int)($summary["sales_count"] ?? 0);
+    // Date filtering
+    $startDate = $_GET['start_date'] ?? date('Y-m-01');
+    $endDate = $_GET['end_date'] ?? date('Y-m-t');
 
-    $topProdLabels = []; $topProdValues = [];
-    $top5 = array_slice($products, 0, 5);
-    foreach($top5 as $tp) { $topProdLabels[] = $tp['name']; $topProdValues[] = (float)$tp['revenue']; }
+    // Validate dates
+    $startDate = date('Y-m-d', strtotime($startDate));
+    $endDate = date('Y-m-d', strtotime($endDate));
 
-    $trendQuery = "SELECT DATE(s.created_at) as sale_date, SUM(si.total) as revenue FROM sale_items si JOIN sales s ON si.sale_id = s.id WHERE DATE(s.created_at) BETWEEN ? AND ? GROUP BY DATE(s.created_at) ORDER BY sale_date ASC";
-    $trendStmt = $conn->prepare($trendQuery);
-    $trendStmt->execute([$startDate, $endDate]);
-    $trendData = $trendStmt->fetchAll(PDO::FETCH_KEY_PAIR);
+    $query = "
+        SELECT 
+            p.id, 
+            p.name, 
+            SUM(si.quantity) as units_sold,
+            AVG(si.price_at_sale) as avg_sale_price,
+            SUM(si.total) as total_revenue
+        FROM sale_items si
+        JOIN products p ON si.product_id = p.id
+        JOIN sales s ON si.sale_id = s.id
+        WHERE DATE(s.created_at) BETWEEN ? AND ?
+        GROUP BY p.id, p.name
+        ORDER BY total_revenue DESC
+    ";
 
-    $trendLabels = []; $trendValues = [];
-    $curr = new DateTime($startDate); $stop = new DateTime($endDate); $stop->modify('+1 day');
-    while($curr < $stop) {
-        $d = $curr->format('Y-m-d'); $trendLabels[] = $curr->format('M j');
-        $trendValues[] = (float)($trendData[$d] ?? 0); $curr->modify('+1 day');
+    $stmt = $conn->prepare($query);
+    $stmt->execute([$startDate, $endDate]);
+    $financials = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+    $totalRevenue = 0;
+    $totalCost = 0;
+    $chartLabels = [];
+    $chartRevenue = [];
+
+    foreach ($financials as $item) {
+        $totalRevenue += (float) $item['total_revenue'];
+
+        // Prepare chart data (top 10 products)
+        if (count($chartLabels) < 10) {
+            $chartLabels[] = $item['name'];
+            $chartRevenue[] = (float) $item['total_revenue'];
+        }
     }
 
-} catch (Exception $e) { die("<div class='p-12 text-center bg-rose-50 text-rose-600 rounded-3xl font-black italic'>Error loading financial performance.</div>"); }
+    // Simplified without cost price
+    $totalCost = 0;
+    $totalProfit = $totalRevenue;
+    $profitMargin = $totalRevenue > 0 ? 100 : 0;
+
+} catch (Exception $e) {
+    error_log('Financial Report Error: ' . $e->getMessage());
+    echo "<div class='p-4 bg-rose-100 border border-rose-200 rounded-lg text-rose-800'>";
+    echo "<strong>Error:</strong> " . htmlspecialchars($e->getMessage());
+    echo "</div>";
+    exit;
+}
 ?>
 
-<div class="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500 pb-10">
-    <div class="flex items-center justify-between pb-2">
-        <div class="flex items-center gap-4">
-            <a href="?page=reports" class="w-10 h-10 bg-slate-900 text-white rounded-xl flex items-center justify-center hover:bg-black transition-all shadow-xl shadow-slate-900/10"><i class="fas fa-arrow-left"></i></a>
-            <div>
-                <h1 class="text-2xl font-black text-slate-900 tracking-tight">Financial Performance</h1>
-                <p class="text-sm font-medium text-slate-400">Revenue and product performance analysis.</p>
-            </div>
+<div class="space-y-6">
+    <!-- Header -->
+    <div class="flex items-center justify-between">
+        <div>
+            <h1 class="text-2xl font-bold text-gray-900">Financial Report</h1>
+            <p class="text-gray-500">Analysis of revenue, costs, and profits.</p>
         </div>
         <div class="flex items-center gap-3">
-            <button onclick="window.location.href = 'api/reports/download.php?report=financial&start_date=<?= $startDate ?>&end_date=<?= $endDate ?>'" class="px-6 py-2.5 bg-blue-600 text-white rounded-xl font-bold flex items-center gap-2 hover:bg-blue-700 transition-all shadow-lg shadow-blue-500/20 active:scale-95"><i class="fas fa-file-export"></i> Export Report</button>
-            <div class="px-5 py-2 bg-blue-600 text-white rounded-2xl shadow-lg">
-                <p class="text-[9px] font-black text-white/50 uppercase tracking-widest leading-none mb-1">Total Revenue</p>
-                <h4 class="text-lg font-black">MWK <?= number_format($totalRevenue, 0) ?></h4>
-            </div>
+            <a href="?page=reports"
+                class="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-all">
+                <i class="fas fa-arrow-left mr-2"></i>Back to Reports
+            </a>
+            <a href="<?php echo defined('BASE_URL') ? BASE_URL : '/Next-Level/rxpms'; ?>/api/reports/download.php?report=financial&start_date=<?= urlencode($startDate) ?>&end_date=<?= urlencode($endDate) ?>"
+                class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-all">
+                <i class="fas fa-download mr-2"></i>Export CSV
+            </a>
         </div>
     </div>
 
-    <!-- Enhanced Filter Bar -->
-    <div class="glassmorphism p-3 rounded-[24px] border border-white/40 shadow-sm bg-gradient-to-r from-emerald-500/5 to-transparent">
-        <form method="GET" class="flex flex-wrap items-end gap-x-6 gap-y-4 p-2">
+    <!-- Filters -->
+    <div class="glassmorphism rounded-2xl p-6">
+        <form method="GET" class="flex flex-wrap items-end gap-4">
             <input type="hidden" name="page" value="reports">
             <input type="hidden" name="view" value="financial">
-            <div class="flex-1 min-w-[200px]">
-                <label class="text-[10px] uppercase font-black text-slate-500 mb-1.5 ml-1 flex items-center gap-1.5"><i class="fas fa-history text-emerald-500/60"></i> Range Start</label>
-                <input type="date" name="start_date" value="<?= $startDate ?>" class="w-full bg-white border-2 border-slate-100 rounded-2xl px-4 py-2.5 text-sm font-bold text-slate-700 focus:ring-4 focus:ring-emerald-500/10 focus:border-emerald-500 transition-all">
+            <div>
+                <label for="start_date" class="block text-sm font-medium text-gray-700 mb-1">Start Date</label>
+                <input type="date" name="start_date" id="start_date" value="<?= htmlspecialchars($startDate) ?>"
+                    class="px-3 py-2 bg-white border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all">
             </div>
-            <div class="flex-1 min-w-[200px]">
-                <label class="text-[10px] uppercase font-black text-slate-500 mb-1.5 ml-1 flex items-center gap-1.5"><i class="fas fa-check-circle text-emerald-500/60"></i> Range End</label>
-                <input type="date" name="end_date" value="<?= $endDate ?>" class="w-full bg-white border-2 border-slate-100 rounded-2xl px-4 py-2.5 text-sm font-bold text-slate-700 focus:ring-4 focus:ring-emerald-500/10 focus:border-emerald-500 transition-all">
+            <div>
+                <label for="end_date" class="block text-sm font-medium text-gray-700 mb-1">End Date</label>
+                <input type="date" name="end_date" id="end_date" value="<?= htmlspecialchars($endDate) ?>"
+                    class="px-3 py-2 bg-white border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all">
             </div>
-            <button type="submit" class="bg-emerald-600 hover:bg-emerald-700 text-white px-10 py-3 rounded-2xl font-black text-sm transition-all shadow-xl shadow-emerald-500/20 active:scale-95">Generate Analysis</button>
+            <button type="submit"
+                class="px-5 py-2 bg-blue-600 text-white rounded-xl font-semibold hover:bg-blue-700 transition-all">
+                <i class="fas fa-filter mr-2"></i>Apply Filters
+            </button>
+            <?php if ($startDate !== date('Y-m-01') || $endDate !== date('Y-m-t')): ?>
+                <a href="?page=reports&view=financial"
+                    class="px-5 py-2 bg-gray-200 text-gray-700 rounded-xl font-semibold hover:bg-gray-300 transition-all">
+                    <i class="fas fa-times mr-2"></i>Clear
+                </a>
+            <?php endif; ?>
         </form>
     </div>
 
-    <!-- Charts Grid -->
-    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <div class="lg:col-span-2 glassmorphism p-8 rounded-[32px] border border-white/40 shadow-sm bg-white min-h-[400px]">
-            <h3 class="text-sm font-black text-slate-900 uppercase tracking-widest mb-8">Revenue Performance Trend</h3>
-            <div class="w-full h-[300px]"><canvas id="revenueTrendChart"></canvas></div>
+    <!-- Summary Cards -->
+    <div class="grid grid-cols-1 md:grid-cols-4 gap-6">
+        <div class="glassmorphism rounded-2xl p-6 flex items-center gap-4">
+            <div class="w-12 h-12 bg-emerald-100 rounded-xl flex items-center justify-center">
+                <i class="fas fa-arrow-up text-emerald-600 text-2xl"></i>
+            </div>
+            <div>
+                <h3 class="text-sm font-semibold text-gray-600 mb-1">Total Revenue</h3>
+                <p class="text-2xl font-bold text-emerald-600">MWK <?= number_format($totalRevenue, 2) ?></p>
+            </div>
         </div>
-        <div class="lg:col-span-1 glassmorphism p-8 rounded-[32px] border border-white/40 shadow-sm bg-white min-h-[400px]">
-            <h3 class="text-sm font-black text-slate-900 uppercase tracking-widest mb-8">Top Revenue Products</h3>
-            <div class="w-full h-[300px]"><canvas id="topProductsBar"></canvas></div>
+
+        <div class="glassmorphism rounded-2xl p-6 flex items-center gap-4 hidden">
+            <div class="w-12 h-12 bg-rose-100 rounded-xl flex items-center justify-center">
+                <i class="fas fa-arrow-down text-rose-600 text-2xl"></i>
+            </div>
+            <div>
+                <h3 class="text-sm font-semibold text-gray-600 mb-1">Total Costs</h3>
+                <p class="text-2xl font-bold text-rose-600">MWK <?= number_format($totalCost, 2) ?></p>
+            </div>
+        </div>
+
+        <div class="glassmorphism rounded-2xl p-6 flex items-center gap-4 hidden">
+            <div class="w-12 h-12 bg-blue-100 rounded-xl flex items-center justify-center">
+                <i class="fas fa-piggy-bank text-blue-600 text-2xl"></i>
+            </div>
+            <div>
+                <h3 class="text-sm font-semibold text-gray-600 mb-1">Net Profit</h3>
+                <p class="text-2xl font-bold text-blue-600">MWK <?= number_format($totalProfit, 2) ?></p>
+            </div>
+        </div>
+
+        <div class="glassmorphism rounded-2xl p-6 flex items-center gap-4 hidden">
+            <div class="w-12 h-12 bg-purple-100 rounded-xl flex items-center justify-center">
+                <i class="fas fa-percentage text-purple-600 text-2xl"></i>
+            </div>
+            <div>
+                <h3 class="text-sm font-semibold text-gray-600 mb-1">Profit Margin</h3>
+                <p class="text-2xl font-bold text-purple-600"><?= number_format($profitMargin, 1) ?>%</p>
+            </div>
         </div>
     </div>
 
-    <!-- Performance Table -->
-    <div class="glassmorphism rounded-[32px] border border-white/40 shadow-sm overflow-hidden bg-white">
-        <table class="w-full">
-            <thead>
-                <tr class="bg-slate-50/50 text-left">
-                    <th class="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Product Name</th>
-                    <th class="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest text-center">Volume Sold</th>
-                    <th class="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest text-right">Revenue Share</th>
-                </tr>
-            </thead>
-            <tbody class="divide-y divide-slate-50">
-                <?php foreach($products as $p): ?>
-                    <tr class="hover:bg-slate-50/40 transition-colors">
-                        <td class="px-6 py-5 font-black text-slate-800 tracking-tight"><?= htmlspecialchars($p["name"]) ?></td>
-                        <td class="px-6 py-5 text-center"><span class="font-black text-slate-600"><?= number_format($p["units_sold"]) ?></span><span class="text-[10px] font-black text-slate-400 uppercase ml-1 tracking-tighter">Units</span></td>
-                        <td class="px-6 py-5 text-right"><p class="font-black text-emerald-600 text-lg leading-none">MWK <?= number_format($p["revenue"], 2) ?></p></td>
-                    </tr>
-                <?php endforeach; ?>
-            </tbody>
-        </table>
-        
-        <!-- Smart Pagination -->
-        <?php if ($totalPages > 1): ?>
-            <div class="p-6 border-t border-slate-50 flex items-center justify-between bg-slate-50/30">
-                <div class="text-xs font-black text-slate-400">
-                    Showing <?= (($page - 1) * $perPage) + 1 ?> - <?= min($page * $perPage, $totalRecords) ?> of <?= number_format($totalRecords) ?> products
-                </div>
-                <div class="flex items-center gap-2">
-                    <?php 
-                    $range = 2;
-                    $start = max(1, $page - $range);
-                    $end = min($totalPages, $page + $range);
-                    
-                    // First button
-                    if ($page > 1): ?>
-                        <a href="?<?= http_build_query(array_merge($_GET, ['p' => 1])) ?>" class="w-10 h-10 flex items-center justify-center rounded-xl font-black text-xs bg-white border-2 border-slate-100 text-slate-400 hover:text-emerald-600 hover:border-emerald-200 transition-all">
-                            <i class="fas fa-angle-double-left text-[10px]"></i>
-                        </a>
-                    <?php endif; ?>
-                    
-                    <!-- Prev button -->
-                    <?php if ($page > 1): ?>
-                        <a href="?<?= http_build_query(array_merge($_GET, ['p' => $page - 1])) ?>" class="w-10 h-10 flex items-center justify-center rounded-xl font-black text-xs bg-white border-2 border-slate-100 text-slate-400 hover:text-emerald-600 hover:border-emerald-200 transition-all">
-                            <i class="fas fa-chevron-left text-[10px]"></i>
-                        </a>
-                    <?php endif; ?>
-                    
-                    <?php for($i = $start; $i <= $end; $i++): ?>
-                        <a href="?<?= http_build_query(array_merge($_GET, ['p' => $i])) ?>" class="w-10 h-10 flex items-center justify-center rounded-xl font-black text-xs transition-all <?= $i === $page ? 'bg-emerald-600 text-white shadow-lg shadow-emerald-500/30' : 'bg-white border-2 border-slate-100 text-slate-400 hover:text-emerald-600 hover:border-emerald-200' ?>">
-                            <?= $i ?>
-                        </a>
-                    <?php endfor; ?>
-                    
-                    <!-- Next button -->
-                    <?php if ($page < $totalPages): ?>
-                        <a href="?<?= http_build_query(array_merge($_GET, ['p' => $page + 1])) ?>" class="w-10 h-10 flex items-center justify-center rounded-xl font-black text-xs bg-white border-2 border-slate-100 text-slate-400 hover:text-emerald-600 hover:border-emerald-200 transition-all">
-                            <i class="fas fa-chevron-right text-[10px]"></i>
-                        </a>
-                    <?php endif; ?>
-                    
-                    <!-- Last button -->
-                    <?php if ($page < $totalPages): ?>
-                        <a href="?<?= http_build_query(array_merge($_GET, ['p' => $totalPages])) ?>" class="w-10 h-10 flex items-center justify-center rounded-xl font-black text-xs bg-white border-2 border-slate-100 text-slate-400 hover:text-emerald-600 hover:border-emerald-200 transition-all">
-                            <i class="fas fa-angle-double-right text-[10px]"></i>
-                        </a>
-                    <?php endif; ?>
-                </div>
+    <!-- Financial Chart -->
+    <?php if (!empty($chartLabels)): ?>
+        <div class="glassmorphism rounded-2xl p-6 shadow-lg">
+            <h3 class="text-lg font-bold text-gray-900 mb-4">Financial Overview - Top Products</h3>
+            <div style="position: relative; height: 350px;">
+                <canvas id="financialChart"></canvas>
             </div>
-        <?php endif; ?>
+        </div>
+    <?php endif; ?>
+
+    <!-- Financial Table -->
+    <div class="glassmorphism rounded-2xl p-6">
+        <h3 class="text-lg font-bold text-gray-900 mb-4">Product Performance Details</h3>
+        <div class="overflow-x-auto">
+            <table class="min-w-full divide-y divide-gray-200">
+                <thead class="bg-gray-50">
+                    <tr>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                            Product</th>
+                        <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                            Units Sold</th>
+                        <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Avg
+                            Price</th>
+                        <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                            Total Revenue</th>
+                    </tr>
+                </thead>
+                <tbody class="bg-white divide-y divide-gray-200">
+                    <?php if (empty($financials)): ?>
+                        <tr>
+                            <td colspan="4" class="px-6 py-12 text-center text-gray-500">
+                                <i class="fas fa-chart-line text-4xl text-gray-300 mb-3"></i>
+                                <p class="text-lg font-medium">No financial data found</p>
+                                <p class="text-sm">Try selecting a different date range</p>
+                            </td>
+                        </tr>
+                    <?php else: ?>
+                        <?php foreach ($financials as $item): ?>
+                            <tr class="hover:bg-gray-50 transition-colors">
+                                <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                                    <?= htmlspecialchars($item['name']) ?>
+                                </td>
+                                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500 text-right">
+                                    <?= number_format($item['units_sold']) ?>
+                                </td>
+                                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500 text-right">
+                                    MWK <?= number_format($item['avg_sale_price'], 2) ?>
+                                </td>
+                                <td class="px-6 py-4 whitespace-nowrap text-sm font-semibold text-emerald-600 text-right">
+                                    MWK <?= number_format($item['total_revenue'], 2) ?>
+                                </td>
+                            </tr>
+                        <?php endforeach; ?>
+                    <?php endif; ?>
+                </tbody>
+                <?php if (!empty($financials)): ?>
+                    <tfoot class="bg-gray-50 font-bold">
+                        <tr>
+                            <td colspan="3" class="px-6 py-4 text-right text-sm text-gray-700">TOTAL REVENUE:</td>
+                            <td class="px-6 py-4 text-right text-sm text-emerald-600">
+                                MWK <?= number_format($totalRevenue, 2) ?>
+                            </td>
+                        </tr>
+                    </tfoot>
+                <?php endif; ?>
+            </table>
+        </div>
     </div>
 </div>
 
-<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-<script>
-document.addEventListener("DOMContentLoaded", () => {
-    new Chart(document.getElementById("revenueTrendChart").getContext("2d"), { type: 'line', data: { labels: <?= json_encode($trendLabels) ?>, datasets: [{ data: <?= json_encode($trendValues) ?>, borderColor: '#10b981', borderWidth: 4, tension: 0.4, fill: true, backgroundColor: 'rgba(16, 185, 129, 0.1)' }] }, options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } } } });
-    new Chart(document.getElementById("topProductsBar"), { type: 'bar', data: { labels: <?= json_encode($topProdLabels) ?>, datasets: [{ data: <?= json_encode($topProdValues) ?>, backgroundColor: '#3b82f6', borderRadius: 12 }] }, options: { indexAxis: 'y', responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } } } });
-});
-</script>
+<?php if (!empty($chartLabels) && !empty($chartRevenue)): ?>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', function () {
+            const ctx = document.getElementById('financialChart');
+
+            if (!ctx || typeof Chart === 'undefined') {
+                console.error('Chart not available');
+                return;
+            }
+
+            new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: <?= json_encode($chartLabels) ?>,
+                    datasets: [
+                        {
+                            label: 'Revenue (MWK)',
+                            data: <?= json_encode($chartRevenue) ?>,
+                            backgroundColor: 'rgba(16, 185, 129, 0.8)',
+                            borderColor: 'rgb(16, 185, 129)',
+                            borderWidth: 1
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            display: true,
+                            labels: { padding: 15 }
+                        },
+                        tooltip: {
+                            callbacks: {
+                                label: function (context) {
+                                    return context.dataset.label + ': MWK ' + context.parsed.y.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+                                }
+                            }
+                        }
+                    },
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            ticks: {
+                                callback: function (value) {
+                                    return 'MWK ' + (value / 1000).toFixed(0) + 'k';
+                                }
+                            }
+                        },
+                        x: {
+                            ticks: {
+                                maxRotation: 45,
+                                minRotation: 45
+                            }
+                        }
+                    }
+                }
+            });
+        });
+    </script>
+<?php endif; ?>
