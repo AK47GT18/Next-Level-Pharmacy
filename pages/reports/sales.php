@@ -61,8 +61,11 @@ try {
     $params[] = $perPage;
     $params[] = $offset;
 
-    $stmt  = $conn->prepare($query);
-    $stmt->execute($params);
+    $stmt = $conn->prepare($query);
+    foreach ($params as $i => $val) {
+        $stmt->bindValue($i + 1, $val, is_int($val) ? PDO::PARAM_INT : PDO::PARAM_STR);
+    }
+    $stmt->execute();
     $sales = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
     // ── TOTALS (full filtered set) ────────────────────────────────────────
@@ -121,9 +124,11 @@ try {
     exit;
 }
 
+if (!function_exists("pgUrl")) {
 function pgUrl(int $pg): string {
     $p = $_GET; $p['pg'] = $pg;
     return '?' . http_build_query($p);
+}
 }
 ?>
 
@@ -345,7 +350,7 @@ function pgUrl(int $pg): string {
                 <thead class="bg-gray-50">
                     <tr>
                         <th class="px-5 py-4 text-left   text-xs font-semibold text-gray-500 uppercase tracking-wider whitespace-nowrap">Sale ID</th>
-                        <th class="px-5 py-4 text-left   text-xs font-semibold text-gray-500 uppercase tracking-wider whitespace-nowrap">Date & Time</th>
+                        <th class="px-5 py-4 text-left   text-xs font-semibold text-gray-500 uppercase tracking-wider whitespace-nowrap">Date &amp; Time</th>
                         <th class="px-5 py-4 text-left   text-xs font-semibold text-gray-500 uppercase tracking-wider whitespace-nowrap">Cashier</th>
                         <th class="px-5 py-4 text-center text-xs font-semibold text-gray-500 uppercase tracking-wider whitespace-nowrap">Items</th>
                         <th class="px-5 py-4 text-left   text-xs font-semibold text-gray-500 uppercase tracking-wider whitespace-nowrap">Payment</th>
