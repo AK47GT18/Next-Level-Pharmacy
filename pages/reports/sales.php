@@ -12,16 +12,40 @@ try {
     $db = Database::getInstance();
     $conn = $db->getConnection();
 
-    // Date filtering
-    $startDate = $_GET['start_date'] ?? date('Y-m-01');
-    $endDate = $_GET['end_date'] ?? date('Y-m-t');
+    // Date filtering - Default to today
+    $startDate = $_GET['start_date'] ?? date('Y-m-d');
+    $endDate = $_GET['end_date'] ?? date('Y-m-d');
     $paymentMethod = $_GET['payment_method'] ?? 'all';
+
+    // Pagination settings
+    $page = max(1, intval($_GET['p'] ?? 1));
+    $perPage = 15;
+    $offset = ($page - 1) * $perPage;
 
     // Validate dates
     $startDate = date('Y-m-d', strtotime($startDate));
     $endDate = date('Y-m-d', strtotime($endDate));
 
-    // Build query with payment filter
+    // Count total for pagination
+    $countQuery = "
+        SELECT COUNT(DISTINCT s.id) 
+        FROM sales s
+        LEFT JOIN payments p ON s.id = p.sale_id
+        WHERE DATE(s.created_at) BETWEEN ? AND ?
+    ";
+    $countParams = [$startDate, $endDate];
+    if ($paymentMethod !== 'all') {
+        $countQuery .= " AND p.payment_method = ?";
+        $countParams[] = $paymentMethod;
+    }
+    $countStmt = $conn->prepare($countQuery);
+    $countStmt->execute($countParams);
+    $totalRecords = (int) $countStmt->fetchColumn();
+    $totalPages = max(1, ceil($totalRecords / $perPage));
+    $page = min($page, $totalPages);
+    $offset = ($page - 1) * $perPage;
+
+    // Build query with payment filter and product names
     $query = "
         SELECT 
             s.id, 
@@ -30,10 +54,13 @@ try {
             u.name as sold_by,
             u.id as sold_by_id,
             COALESCE(p.payment_method, 'cash') as payment_method,
-            COALESCE(si_counts.cnt, 0) as items_count
+            COALESCE(si_counts.cnt, 0) as items_count,
+            GROUP_CONCAT(DISTINCT pr.name SEPARATOR ', ') as products_list
         FROM sales s
         LEFT JOIN users u ON s.sold_by = u.id
         LEFT JOIN payments p ON s.id = p.sale_id
+        LEFT JOIN sale_items si ON s.id = si.sale_id
+        LEFT JOIN products pr ON si.product_id = pr.id
         LEFT JOIN (
             SELECT sale_id, COUNT(*) as cnt FROM sale_items GROUP BY sale_id
         ) si_counts ON s.id = si_counts.sale_id
@@ -47,15 +74,32 @@ try {
         $params[] = $paymentMethod;
     }
 
-    $query .= " ORDER BY s.created_at DESC";
+    $query .= " GROUP BY s.id ORDER BY s.created_at DESC LIMIT $perPage OFFSET $offset";
 
     $stmt = $conn->prepare($query);
     $stmt->execute($params);
     $sales = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
-    // Calculate statistics
-    $totalSales = array_reduce($sales, fn($sum, $sale) => $sum + (float) ($sale['total_amount'] ?? 0), 0);
-    $totalTransactions = count($sales);
+    // Calculate statistics (for the entire date range, not just the page)
+    $statsQuery = "
+        SELECT 
+            SUM(total_amount) as total_sales,
+            COUNT(*) as total_transactions
+        FROM sales s
+        LEFT JOIN payments p ON s.id = p.sale_id
+        WHERE DATE(s.created_at) BETWEEN ? AND ?
+    ";
+    $statsParams = [$startDate, $endDate];
+    if ($paymentMethod !== 'all') {
+        $statsQuery .= " AND p.payment_method = ?";
+        $statsParams[] = $paymentMethod;
+    }
+    $statsStmt = $conn->prepare($statsQuery);
+    $statsStmt->execute($statsParams);
+    $stats = $statsStmt->fetch(PDO::FETCH_ASSOC);
+
+    $totalSales = (float)($stats['total_sales'] ?? 0);
+    $totalTransactions = (int)($stats['total_transactions'] ?? 0);
     $avgSaleValue = $totalTransactions > 0 ? $totalSales / $totalTransactions : 0;
 
     // Get sales trend data for chart (last 30 days)
@@ -170,52 +214,28 @@ try {
         </div>
     </div>
 
-    <!-- Filters -->
-    <div class="glassmorphism rounded-2xl p-6">
-        <form method="GET" class="grid grid-cols-1 md:grid-cols-5 gap-4 items-end">
-            <input type="hidden" name="page" value="reports">
-            <input type="hidden" name="view" value="sales">
+    </div>
 
-            <div>
-                <label for="start_date" class="block text-sm font-medium text-gray-700 mb-1">Date From</label>
-                <input type="date" name="start_date" id="start_date" value="<?= htmlspecialchars($startDate) ?>"
-                    class="w-full px-3 py-2 bg-white border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all">
-            </div>
-
-            <div>
-                <label for="end_date" class="block text-sm font-medium text-gray-700 mb-1">Date To</label>
-                <input type="date" name="end_date" id="end_date" value="<?= htmlspecialchars($endDate) ?>"
-                    class="w-full px-3 py-2 bg-white border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all">
-            </div>
-
-            <div>
-                <label for="payment_method" class="block text-sm font-medium text-gray-700 mb-1">Payment Method</label>
-                <select name="payment_method" id="payment_method"
-                    class="w-full px-3 py-2 bg-white border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all">
-                    <option value="all" <?= $paymentMethod === 'all' ? 'selected' : '' ?>>All Methods</option>
-                    <option value="cash" <?= $paymentMethod === 'cash' ? 'selected' : '' ?>>Cash</option>
-                    <option value="card" <?= $paymentMethod === 'card' ? 'selected' : '' ?>>Card</option>
-                    <option value="mobile_money" <?= $paymentMethod === 'mobile_money' ? 'selected' : '' ?>>Mobile Money
-                    </option>
-                    <option value="bank_transfer" <?= $paymentMethod === 'bank_transfer' ? 'selected' : '' ?>>Bank Transfer
-                    </option>
-                </select>
-            </div>
-
-            <div class="md:col-span-2 flex gap-2">
-                <button type="submit"
-                    class="flex-1 px-5 py-2 bg-blue-600 text-white rounded-xl font-semibold hover:bg-blue-700 transition-all flex items-center justify-center gap-2">
-                    <i class="fas fa-filter"></i>
-                    <span>Apply Filters</span>
-                </button>
-                <?php if ($paymentMethod !== 'all' || $startDate !== date('Y-m-01') || $endDate !== date('Y-m-t')): ?>
-                    <a href="?page=reports&view=sales"
-                        class="px-4 py-2 bg-gray-200 text-gray-700 rounded-xl font-semibold hover:bg-gray-300 transition-all flex items-center gap-2">
-                        <i class="fas fa-times"></i>
-                    </a>
-                <?php endif; ?>
-            </div>
-        </form>
+    <!-- Day of Week Filter -->
+    <div class="glassmorphism rounded-2xl p-4 overflow-x-auto">
+        <div class="flex items-center gap-2 min-w-max">
+            <span class="text-sm font-bold text-gray-500 mr-2">Quick Filter:</span>
+            <?php
+            $days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
+            foreach ($days as $day):
+                $dayDate = date('Y-m-d', strtotime("this week $day"));
+                $isActive = $startDate === $dayDate && $endDate === $dayDate;
+                ?>
+                <a href="?page=reports&view=sales&start_date=<?= $dayDate ?>&end_date=<?= $dayDate ?>"
+                    class="px-4 py-2 rounded-xl text-sm font-bold transition-all <?= $isActive ? 'bg-blue-600 text-white shadow-lg' : 'bg-white text-gray-600 hover:bg-gray-50 border border-gray-100' ?>">
+                    <?= $day ?>
+                </a>
+            <?php endforeach; ?>
+            <a href="?page=reports&view=sales"
+                class="px-4 py-2 rounded-xl text-sm font-bold bg-gray-100 text-gray-600 hover:bg-gray-200 ml-auto">
+                Clear
+            </a>
+        </div>
     </div>
 
     <!-- Sales Trend Chart -->
@@ -338,8 +358,10 @@ try {
                         </th>
                         <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                             Payment</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Product(s)</th>
                         <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
                             Total Amount</th>
+                        <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
                     </tr>
                 </thead>
                 <tbody class="bg-white divide-y divide-gray-200">
@@ -374,23 +396,25 @@ try {
                                     </span>
                                 </td>
                                 <td class="px-6 py-4 whitespace-nowrap text-sm">
-                                    <?php
-                                    $paymentIcons = [
-                                        'cash' => ['icon' => 'fa-money-bill-wave', 'bg' => 'bg-emerald-100', 'text' => 'text-emerald-800'],
-                                        'card' => ['icon' => 'fa-credit-card', 'bg' => 'bg-blue-100', 'text' => 'text-blue-800'],
-                                        'mobile_money' => ['icon' => 'fa-mobile-alt', 'bg' => 'bg-purple-100', 'text' => 'text-purple-800'],
-                                        'bank_transfer' => ['icon' => 'fa-university', 'bg' => 'bg-indigo-100', 'text' => 'text-indigo-800']
-                                    ];
-                                    $payment = $paymentIcons[$sale['payment_method']] ?? ['icon' => 'fa-question', 'bg' => 'bg-gray-100', 'text' => 'text-gray-800'];
-                                    ?>
-                                    <span
-                                        class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-medium <?= $payment['bg'] ?> <?= $payment['text'] ?>">
-                                        <i class="fas <?= $payment['icon'] ?>"></i>
-                                        <?= ucwords(str_replace('_', ' ', $sale['payment_method'])) ?>
-                                    </span>
+                                    <div class="max-w-xs overflow-hidden text-ellipsis text-gray-500" title="<?= htmlspecialchars($sale['products_list'] ?? '') ?>">
+                                        <?= htmlspecialchars($sale['products_list'] ?? 'No items') ?>
+                                    </div>
                                 </td>
                                 <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900 font-bold text-right">
                                     MWK <?= number_format($sale['total_amount'], 2) ?>
+                                </td>
+                                <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                                    <div class="flex items-center justify-end gap-2">
+                                        <button onclick="editSale(<?= $sale['id'] ?>)" class="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors" title="Edit Sale">
+                                            <i class="fas fa-edit"></i>
+                                        </button>
+                                        <button onclick="deleteSale(<?= $sale['id'] ?>)" class="p-2 text-rose-600 hover:bg-rose-50 rounded-lg transition-colors" title="Delete Sale">
+                                            <i class="fas fa-trash"></i>
+                                        </button>
+                                        <button onclick='printSale(<?= json_encode($sale) ?>)' class="p-2 text-gray-600 hover:bg-gray-50 rounded-lg transition-colors" title="Print Receipt">
+                                            <i class="fas fa-print"></i>
+                                        </button>
+                                    </div>
                                 </td>
                             </tr>
                         <?php endforeach; ?>
@@ -399,70 +423,221 @@ try {
                 <?php if (!empty($sales)): ?>
                     <tfoot class="bg-gray-50 font-semibold">
                         <tr>
-                            <td colspan="6" class="px-6 py-4 text-right text-sm text-gray-700">Total:</td>
+                            <td colspan="5" class="px-6 py-4 text-right text-sm text-gray-700">Page Total:</td>
+                            <td class="px-6 py-4 text-right text-sm text-gray-900 font-bold">
+                                MWK <?= number_format(array_reduce($sales, fn($sum, $sale) => $sum + (float)$sale['total_amount'], 0), 2) ?>
+                            </td>
+                            <td></td>
+                        </tr>
+                        <tr>
+                            <td colspan="5" class="px-6 py-4 text-right text-sm text-gray-700">Overall Total:</td>
                             <td class="px-6 py-4 text-right text-sm text-gray-900 font-bold">
                                 MWK <?= number_format($totalSales, 2) ?>
                             </td>
+                            <td></td>
                         </tr>
                     </tfoot>
                 <?php endif; ?>
             </table>
         </div>
+
+        <!-- Pagination -->
+        <?php if ($totalPages > 1): ?>
+            <div class="mt-6 flex items-center justify-between border-t border-gray-100 pt-6">
+                <p class="text-sm text-gray-500">
+                    Showing <span class="font-medium"><?= $offset + 1 ?></span> to 
+                    <span class="font-medium"><?= min($offset + $perPage, $totalRecords) ?></span> of 
+                    <span class="font-medium"><?= $totalRecords ?></span> results
+                </p>
+                <div class="flex gap-2">
+                    <?php if ($page > 1): ?>
+                        <a href="?page=reports&view=sales&start_date=<?= $startDate ?>&end_date=<?= $endDate ?>&payment_method=<?= $paymentMethod ?>&p=<?= $page - 1 ?>" 
+                           class="px-4 py-2 bg-white border border-gray-200 text-gray-700 rounded-lg hover:bg-gray-50 transition-all font-medium text-sm">
+                            Previous
+                        </a>
+                    <?php endif; ?>
+                    
+                    <?php for ($i = max(1, $page - 2); $i <= min($totalPages, $page + 2); $i++): ?>
+                        <a href="?page=reports&view=sales&start_date=<?= $startDate ?>&end_date=<?= $endDate ?>&payment_method=<?= $paymentMethod ?>&p=<?= $i ?>" 
+                           class="w-10 h-10 flex items-center justify-center rounded-lg text-sm font-bold transition-all <?= $i === $page ? 'bg-blue-600 text-white' : 'bg-white border border-gray-200 text-gray-600 hover:bg-gray-50' ?>">
+                            <?= $i ?>
+                        </a>
+                    <?php endfor; ?>
+
+                    <?php if ($page < $totalPages): ?>
+                        <a href="?page=reports&view=sales&start_date=<?= $startDate ?>&end_date=<?= $endDate ?>&payment_method=<?= $paymentMethod ?>&p=<?= $page + 1 ?>" 
+                           class="px-4 py-2 bg-white border border-gray-200 text-gray-700 rounded-lg hover:bg-gray-50 transition-all font-medium text-sm">
+                            Next
+                        </a>
+                    <?php endif; ?>
+                </div>
+            </div>
+        <?php endif; ?>
+    </div>
+</div>
+
+<!-- Edit Sale Modal -->
+<div id="editSaleModal" class="hidden fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+    <div class="bg-white rounded-[32px] w-full max-w-2xl overflow-hidden shadow-2xl animate-in zoom-in duration-300">
+        <div class="p-8 border-b border-gray-100 flex items-center justify-between">
+            <div>
+                <h2 class="text-2xl font-black text-gray-900">Edit Sale <span id="editSaleIdDisplay" class="text-blue-600"></span></h2>
+                <p class="text-sm font-bold text-gray-400 uppercase tracking-widest mt-1">Adjust item quantities</p>
+            </div>
+            <button onclick="closeEditModal()" class="w-10 h-10 flex items-center justify-center rounded-2xl bg-gray-50 text-gray-400 hover:text-rose-500 hover:bg-rose-50 transition-all">
+                <i class="fas fa-times"></i>
+            </button>
+        </div>
+        <div id="editSaleContent" class="p-8 max-h-[60vh] overflow-y-auto">
+            <!-- Loading state -->
+            <div class="flex flex-col items-center py-10 text-gray-400">
+                <i class="fas fa-circle-notch fa-spin text-3xl mb-4"></i>
+                <p class="font-bold uppercase tracking-widest text-xs">Loading items...</p>
+            </div>
+        </div>
+        <div class="p-8 bg-gray-50 border-t border-gray-100 flex items-center justify-between">
+            <div class="text-left">
+                <p class="text-[10px] font-black text-gray-400 uppercase tracking-widest">Estimated Total</p>
+                <p id="editSaleNewTotal" class="text-xl font-black text-gray-900">MWK 0.00</p>
+            </div>
+            <button onclick="saveSaleChanges()" id="saveBtn" class="px-10 py-4 bg-blue-600 text-white rounded-2xl font-black text-sm shadow-xl shadow-blue-500/20 hover:bg-blue-700 hover:scale-105 active:scale-95 transition-all flex items-center gap-3">
+                <i class="fas fa-save"></i> Save Changes
+            </button>
+        </div>
     </div>
 </div>
 
 <script>
-    function printSale(sale) {
-        const printWindow = window.open('', '_blank');
-        const date = new Date(sale.created_at).toLocaleString();
+    }
 
-        // You might want to fetch line items here via AJAX if not available in $sale
-        // For now, printing basic info as requested
+    let currentEditingSaleId = null;
 
-        printWindow.document.write(`
-        <html>
-        <head>
-            <title>Sale Receipt #${sale.id}</title>
-            <style>
-                body { font-family: 'Courier New', monospace; padding: 20px; max-width: 300px; margin: 0 auto; }
-                .header { text-align: center; margin-bottom: 20px; border-bottom: 1px dashed #000; padding-bottom: 10px; }
-                .row { display: flex; justify-content: space-between; margin-bottom: 5px; }
-                .total { border-top: 1px dashed #000; margin-top: 10px; padding-top: 10px; font-weight: bold; }
-                .footer { text-align: center; margin-top: 20px; font-size: 12px; }
-                @media print { @page { margin: 0; } body { margin: 1cm; } }
-            </style>
-        </head>
-        <body>
-            <div class="header">
-                <h3>Next-Level Pharmacy</h3>
-                <p>Sale #${sale.id}</p>
-                <p>${date}</p>
-            </div>
-            <div class="content">
-                <div class="row">
-                    <span>Cashier:</span>
-                    <span>${sale.sold_by || 'Unknown'}</span>
-                </div>
-                <!-- Line items would go here -->
-                <div class="total row">
-                    <span>Total:</span>
-                    <span>MWK ${parseFloat(sale.total_amount).toFixed(2)}</span>
-                </div>
-                <div class="row">
-                    <span>Payment:</span>
-                    <span>${sale.payment_method || 'Cash'}</span>
-                </div>
-            </div>
-            <div class="footer">
-                <p>Thank you for your business!</p>
-            </div>
-            <script>
-                window.onload = function() { window.print(); window.close(); }
-            <\/script>
-        </body>
-        </html>
-    `);
-        printWindow.document.close();
+    async function editSale(saleId) {
+        currentEditingSaleId = saleId;
+        document.getElementById('editSaleIdDisplay').innerText = '#' + String(saleId).padStart(5, '0');
+        const modal = document.getElementById('editSaleModal');
+        const content = document.getElementById('editSaleContent');
+        modal.classList.remove('hidden');
+        
+        try {
+            const response = await fetch(`api/sales/get-items.php?sale_id=${saleId}`);
+            const data = await response.json();
+            
+            if (data.status === 'success') {
+                let html = '<div class="space-y-4">';
+                data.items.forEach(item => {
+                    html += `
+                        <div class="flex items-center justify-between p-4 bg-gray-50 rounded-2xl border border-gray-100 sale-item-row" 
+                             data-id="${item.id}" data-price="${item.price_at_sale}">
+                            <div class="flex-1">
+                                <p class="font-bold text-gray-900">${item.product_name}</p>
+                                <p class="text-[10px] font-black text-gray-400 uppercase tracking-widest mt-0.5">MWK ${parseFloat(item.price_at_sale).toFixed(2)} / unit</p>
+                            </div>
+                            <div class="flex items-center gap-3">
+                                <button onclick="updateQty(${item.id}, -1)" class="w-8 h-8 flex items-center justify-center bg-white border border-gray-200 rounded-lg hover:bg-rose-50 hover:text-rose-500 transition-colors">
+                                    <i class="fas fa-minus text-xs"></i>
+                                </button>
+                                <input type="number" value="${item.quantity}" min="1" 
+                                    class="w-16 bg-white border border-gray-200 rounded-lg px-2 py-1 text-center font-bold qty-input" 
+                                    onchange="calculateEditTotal()" id="qty-${item.id}">
+                                <button onclick="updateQty(${item.id}, 1)" class="w-8 h-8 flex items-center justify-center bg-white border border-gray-200 rounded-lg hover:bg-emerald-50 hover:text-emerald-500 transition-colors">
+                                    <i class="fas fa-plus text-xs"></i>
+                                </button>
+                            </div>
+                        </div>
+                    `;
+                });
+                html += '</div>';
+                content.innerHTML = html;
+                calculateEditTotal();
+            } else {
+                content.innerHTML = `<p class="text-rose-500 text-center font-bold">${data.message}</p>`;
+            }
+        } catch (error) {
+            content.innerHTML = '<p class="text-rose-500 text-center font-bold">Failed to load items</p>';
+        }
+    }
+
+    function updateQty(itemId, delta) {
+        const input = document.getElementById(`qty-${itemId}`);
+        input.value = Math.max(1, parseInt(input.value) + delta);
+        calculateEditTotal();
+    }
+
+    function calculateEditTotal() {
+        let total = 0;
+        document.querySelectorAll('.sale-item-row').forEach(row => {
+            const price = parseFloat(row.dataset.price);
+            const qty = parseInt(row.querySelector('.qty-input').value);
+            total += price * qty;
+        });
+        document.getElementById('editSaleNewTotal').innerText = 'MWK ' + total.toLocaleString('en-US', { minimumFractionDigits: 2 });
+    }
+
+    function closeEditModal() {
+        document.getElementById('editSaleModal').classList.add('hidden');
+    }
+
+    async function saveSaleChanges() {
+        const btn = document.getElementById('saveBtn');
+        const items = [];
+        document.querySelectorAll('.sale-item-row').forEach(row => {
+            items.push({
+                sale_item_id: parseInt(row.dataset.id),
+                new_quantity: parseInt(row.querySelector('.qty-input').value)
+            });
+        });
+
+        btn.disabled = true;
+        btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Saving...';
+
+        try {
+            const response = await fetch('api/sales/update.php', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    sale_id: currentEditingSaleId,
+                    items: items,
+                    csrf_token: '<?= $_SESSION['csrf_token'] ?? '' ?>'
+                })
+            });
+
+            const data = await response.json();
+            if (data.status === 'success') {
+                location.reload();
+            } else {
+                alert(data.message);
+            }
+        } catch (error) {
+            alert('An error occurred while saving.');
+        } finally {
+            btn.disabled = false;
+            btn.innerHTML = '<i class="fas fa-save"></i> Save Changes';
+        }
+    }
+
+    async function deleteSale(saleId) {
+        if (!confirm('Are you sure you want to delete this sale? This will restore stock levels.')) return;
+
+        try {
+            const response = await fetch('api/sales/delete.php', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    sale_id: saleId,
+                    csrf_token: '<?= $_SESSION['csrf_token'] ?? '' ?>'
+                })
+            });
+
+            const data = await response.json();
+            if (data.status === 'success') {
+                location.reload();
+            } else {
+                alert(data.message);
+            }
+        } catch (error) {
+            alert('An error occurred during deletion.');
+        }
     }
 </script>
 
