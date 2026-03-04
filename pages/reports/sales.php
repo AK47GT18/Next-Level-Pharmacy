@@ -177,8 +177,8 @@ try {
     </div>
 
     <!-- Filters & Search Bar (Premium Glassmorphism) -->
-    <div class="glassmorphism rounded-[32px] p-10 border border-white/40 shadow-sm bg-white/50 backdrop-blur-md">
-        <form method="GET" class="grid grid-cols-1 md:grid-cols-6 gap-8 items-end">
+    <div class="glassmorphism rounded-[32px] p-12 border border-white/40 shadow-sm bg-white/50 backdrop-blur-md">
+        <form method="GET" class="grid grid-cols-1 md:grid-cols-6 gap-10 items-end">
             <input type="hidden" name="page" value="reports">
             <input type="hidden" name="view" value="sales">
 
@@ -248,8 +248,8 @@ try {
     </div>
 
     <!-- Summary Statistics Grid -->
-    <div class="grid grid-cols-1 md:grid-cols-3 gap-8">
-        <div class="glassmorphism rounded-[32px] p-8 bg-white border border-white/40 shadow-sm flex items-center gap-6 group hover:translate-y--1 transition-all">
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-10">
+        <div class="glassmorphism rounded-[32px] p-10 bg-white border border-white/40 shadow-sm flex items-center gap-8 group hover:translate-y--1 transition-all">
             <div class="w-20 h-20 bg-blue-50 text-blue-600 rounded-[24px] flex items-center justify-center text-3xl shadow-inner shadow-blue-100/50 group-hover:bg-blue-600 group-hover:text-white transition-all">
                 <i class="fas fa-dollar-sign"></i>
             </div>
@@ -281,8 +281,8 @@ try {
     </div>
 
     <!-- Daily Itemized Summary Section -->
-    <div class="glassmorphism rounded-[32px] p-10 bg-white border border-white/40 shadow-sm">
-        <div class="flex items-center justify-between mb-10">
+    <div class="glassmorphism rounded-[32px] p-12 bg-white border border-white/40 shadow-sm">
+        <div class="flex items-center justify-between mb-12">
             <div>
                 <h2 class="text-2xl font-black text-gray-900">Daily Itemized Summary</h2>
                 <p class="text-[10px] font-black text-gray-400 uppercase tracking-widest mt-1">Grouped by product performance</p>
@@ -313,23 +313,23 @@ try {
                             <table class="w-full">
                                 <thead class="bg-gray-50/30 text-gray-400 font-bold uppercase text-[10px] tracking-widest">
                                     <tr>
-                                        <th class="px-10 py-5 text-left">Product / Item Name</th>
-                                        <th class="px-10 py-5 text-center">Qty Sold</th>
-                                        <th class="px-10 py-5 text-right">Revenue</th>
+                                        <th class="px-12 py-6 text-left">Product / Item Name</th>
+                                        <th class="px-12 py-6 text-center">Qty Sold</th>
+                                        <th class="px-12 py-6 text-right">Revenue</th>
                                     </tr>
                                 </thead>
                                 <tbody class="divide-y divide-gray-50">
                                     <?php foreach ($data['items'] as $item): ?>
                                         <tr class="hover:bg-blue-50/30 transition-all group">
-                                            <td class="px-10 py-5 font-black text-gray-800">
+                                            <td class="px-12 py-6 font-black text-gray-800">
                                                 <?= htmlspecialchars($item['product_name']) ?>
                                             </td>
-                                            <td class="px-10 py-5 text-center">
+                                            <td class="px-12 py-6 text-center">
                                                 <span class="px-3 py-1.5 bg-gray-100 text-gray-700 rounded-xl font-black text-xs">
                                                     <?= $item['total_qty'] ?>
                                                 </span>
                                             </td>
-                                            <td class="px-10 py-5 text-right font-black text-gray-900">
+                                            <td class="px-12 py-6 text-right font-black text-gray-900">
                                                 MWK <?= number_format($item['total_revenue'], 2) ?>
                                             </td>
                                         </tr>
@@ -344,8 +344,8 @@ try {
     </div>
 
     <!-- Detailed Transaction Table -->
-    <div class="glassmorphism rounded-[32px] p-10 bg-white border border-white/40 shadow-sm">
-        <div class="flex items-center justify-between mb-10">
+    <div class="glassmorphism rounded-[32px] p-12 bg-white border border-white/40 shadow-sm">
+        <div class="flex items-center justify-between mb-12">
             <div>
                 <h2 class="text-2xl font-black text-gray-900">Transaction History</h2>
                 <p class="text-[10px] font-black text-gray-400 uppercase tracking-widest mt-1">Detailed log of individual sales</p>
@@ -356,13 +356,13 @@ try {
             <table class="min-w-full">
                 <thead class="bg-gray-50/50">
                     <tr>
-                        <th class="px-8 py-6 text-left text-[10px] font-black text-gray-400 uppercase tracking-widest">Sale ID</th>
-                        <th class="px-8 py-6 text-left text-[10px] font-black text-gray-400 uppercase tracking-widest">Time & Date</th>
-                        <th class="px-8 py-6 text-left text-[10px] font-black text-gray-400 uppercase tracking-widest">Cashier</th>
-                        <th class="px-8 py-6 text-left text-[10px] font-black text-gray-400 uppercase tracking-widest">Method</th>
-                        <th class="px-8 py-6 text-left text-[10px] font-black text-gray-400 uppercase tracking-widest">Included Products</th>
-                        <th class="px-8 py-6 text-right text-[10px] font-black text-gray-400 uppercase tracking-widest">Total</th>
-                        <th class="px-8 py-6 text-right text-[10px] font-black text-gray-400 uppercase tracking-widest">Actions</th>
+                        <th class="px-10 py-8 text-left text-[10px] font-black text-gray-400 uppercase tracking-widest">Sale ID</th>
+                        <th class="px-10 py-8 text-left text-[10px] font-black text-gray-400 uppercase tracking-widest">Time & Date</th>
+                        <th class="px-10 py-8 text-left text-[10px] font-black text-gray-400 uppercase tracking-widest">Cashier</th>
+                        <th class="px-10 py-8 text-left text-[10px] font-black text-gray-400 uppercase tracking-widest">Method</th>
+                        <th class="px-10 py-8 text-left text-[10px] font-black text-gray-400 uppercase tracking-widest">Included Products</th>
+                        <th class="px-10 py-8 text-right text-[10px] font-black text-gray-400 uppercase tracking-widest">Total</th>
+                        <th class="px-10 py-8 text-right text-[10px] font-black text-gray-400 uppercase tracking-widest">Actions</th>
                     </tr>
                 </thead>
                 <tbody class="divide-y divide-gray-100">
@@ -378,17 +378,17 @@ try {
                     <?php else: ?>
                         <?php foreach ($sales as $sale): ?>
                             <tr class="hover:bg-gray-50/50 transition-all group">
-                                <td class="px-8 py-8 whitespace-nowrap">
+                                <td class="px-10 py-10 whitespace-nowrap">
                                     <span class="px-4 py-2 bg-blue-50 text-blue-600 rounded-xl text-[10px] font-black border border-blue-100/50 shadow-sm shadow-blue-500/5">
                                         #<?= str_pad($sale['id'], 5, '0', STR_PAD_LEFT) ?>
                                     </span>
                                 </td>
-                                <td class="px-8 py-8 whitespace-nowrap">
+                                <td class="px-10 py-10 whitespace-nowrap">
                                     <p class="text-sm font-black text-gray-800 tracking-tight"><?= date('M j, Y', strtotime($sale['created_at'])) ?></p>
-                                    <p class="text-[10px] font-bold text-gray-400 uppercase tracking-widest mt-1"><?= date('H:i', strtotime($sale['created_at'])) ?></p>
+                                    <p class="text-[10px] font-bold text-gray-400 uppercase tracking-widest mt-2"><?= date('H:i', strtotime($sale['created_at'])) ?></p>
                                 </td>
-                                <td class="px-8 py-8 whitespace-nowrap">
-                                    <div class="flex items-center gap-3">
+                                <td class="px-10 py-10 whitespace-nowrap">
+                                    <div class="flex items-center gap-4">
                                         <div class="w-10 h-10 rounded-2xl bg-gray-50 border border-gray-100 flex items-center justify-center text-gray-400 group-hover:bg-blue-600 group-hover:text-white group-hover:border-blue-700 transition-all">
                                             <i class="fas fa-user-tie text-xs"></i>
                                         </div>
@@ -413,21 +413,21 @@ try {
                                         <?= str_replace('_', ' ', $sale['payment_method']) ?>
                                     </span>
                                 </td>
-                                <td class="px-8 py-8">
+                                <td class="px-10 py-10">
                                     <div class="max-w-[200px] truncate text-sm font-bold text-gray-400 group-hover:text-gray-700 transition-colors" title="<?= htmlspecialchars($sale['products_list'] ?? '') ?>">
                                         <?= htmlspecialchars($sale['products_list'] ?? 'Items unavailable') ?>
                                     </div>
-                                    <p class="text-[9px] font-black text-blue-500 uppercase tracking-widest mt-1"><?= $sale['items_count'] ?> Total Types</p>
+                                    <p class="text-[9px] font-black text-blue-500 uppercase tracking-widest mt-2"><?= $sale['items_count'] ?> Total Types</p>
                                 </td>
-                                <td class="px-8 py-8 whitespace-nowrap text-right">
+                                <td class="px-10 py-10 whitespace-nowrap text-right">
                                     <p class="text-sm font-black text-gray-900 leading-none">MWK <?= number_format($sale['total_amount'], 2) ?></p>
                                     <p class="text-[9px] font-black text-emerald-500 uppercase tracking-widest mt-1.5 flex items-center justify-end gap-1">
                                         <span class="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse"></span>
                                         Completed
                                     </p>
                                 </td>
-                                <td class="px-8 py-8 whitespace-nowrap text-right">
-                                    <div class="flex items-center justify-end gap-2">
+                                <td class="px-10 py-10 whitespace-nowrap text-right">
+                                    <div class="flex items-center justify-end gap-3">
                                         <button onclick="editSale(<?= $sale['id'] ?>)" class="w-11 h-11 flex items-center justify-center rounded-2xl bg-blue-50 text-blue-600 hover:bg-blue-600 hover:text-white transition-all shadow-sm shadow-blue-500/5 group/btn" title="Edit Entry">
                                             <i class="fas fa-edit text-xs"></i>
                                         </button>
@@ -446,15 +446,15 @@ try {
                 <?php if (!empty($sales)): ?>
                     <tfoot class="bg-gray-50/80 border-t border-gray-100">
                         <tr>
-                            <td colspan="5" class="px-8 py-10 text-right text-[10px] font-black text-gray-400 uppercase tracking-widest">Running Page Total:</td>
-                            <td class="px-8 py-10 text-right text-base font-black text-gray-900">
+                            <td colspan="5" class="px-10 py-12 text-right text-[10px] font-black text-gray-400 uppercase tracking-widest">Running Page Total:</td>
+                            <td class="px-10 py-12 text-right text-base font-black text-gray-900">
                                 MWK <?= number_format(array_reduce($sales, fn($sum, $sale) => $sum + (float)$sale['total_amount'], 0), 2) ?>
                             </td>
                             <td></td>
                         </tr>
                         <tr>
-                            <td colspan="5" class="px-8 py-4 text-right text-[10px] font-black text-gray-400 uppercase tracking-widest pt-0">Selection Overall Sum:</td>
-                            <td class="px-8 py-4 text-right text-xl font-black text-blue-600 pt-0">
+                            <td colspan="5" class="px-10 py-6 text-right text-[10px] font-black text-gray-400 uppercase tracking-widest pt-0">Selection Overall Sum:</td>
+                            <td class="px-10 py-6 text-right text-xl font-black text-blue-600 pt-0">
                                 MWK <?= number_format($totalSales, 2) ?>
                             </td>
                             <td></td>
@@ -466,7 +466,7 @@ try {
 
         <!-- Pagination Section -->
         <?php if ($totalPages > 1): ?>
-            <div class="mt-12 flex flex-col md:flex-row items-center justify-between border-t border-gray-100 pt-12 gap-6">
+            <div class="mt-16 flex flex-col md:flex-row items-center justify-between border-t border-gray-100 pt-12 gap-8">
                 <div class="flex items-center gap-4 text-sm font-black text-gray-400 uppercase tracking-widest">
                     <span class="px-4 py-2 bg-gray-50 border border-gray-100 rounded-xl text-gray-900">Records <?= $offset + 1 ?> — <?= min($offset + $perPage, $totalRecords) ?></span>
                     <span>of <?= $totalRecords ?> Matches</span>
