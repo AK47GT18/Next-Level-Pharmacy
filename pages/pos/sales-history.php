@@ -232,18 +232,6 @@ $paymentLabels = [
                             <!-- Actions -->
                             <td class="px-5 py-4 whitespace-nowrap">
                                 <div class="flex items-center justify-center gap-1.5">
-                                    <button onclick="editSale(<?= $it['sale_id'] ?>)"
-                                            title="Edit sale"
-                                            class="w-8 h-8 flex items-center justify-center rounded-lg bg-blue-50 text-blue-500 hover:bg-blue-500 hover:text-white transition-all text-xs">
-                                        <i class="fas fa-edit"></i>
-                                    </button>
-                                    <?php if ($isAdmin): ?>
-                                    <button onclick="deleteSale(<?= $it['sale_id'] ?>)"
-                                            title="Void sale"
-                                            class="w-8 h-8 flex items-center justify-center rounded-lg bg-red-50 text-red-500 hover:bg-red-500 hover:text-white transition-all text-xs">
-                                        <i class="fas fa-trash"></i>
-                                    </button>
-                                    <?php endif; ?>
                                     <button onclick='printSale(<?= json_encode([
                                         "id"             => $it["sale_id"],
                                         "created_at"     => $it["created_at"],
