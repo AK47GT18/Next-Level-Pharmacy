@@ -1,0 +1,27 @@
+name: Deploy to InfinityFree
+on:
+  push:
+    branches:
+      - main # Change this if your branch is named 'master'
+
+jobs:
+  web-deploy:
+    name: 🎉 Deploy
+    runs-on: ubuntu-latest
+    steps:
+      - name: 🚚 Get latest code
+        uses: actions/checkout@v4
+
+      - name: 📂 Sync files
+        uses: SamKirkland/FTP-Deploy-Action@v4.3.5
+        with:
+          server: ${{ secrets.FTP_SERVER }}
+          username: ${{ secrets.FTP_USERNAME }}
+          password: ${{ secrets.FTP_PASSWORD }}
+          # The folder on InfinityFree where your site lives.
+          # Usually it is './htdocs/'
+          server-dir: ./htdocs/
+          # The folder in your Repo to upload (leave as './' for everything)
+          local-dir: ./
+          # CAUTION: This deletes files on the server that aren't in your repo
+          # Set to false if you store user uploads (images) on the server directly
