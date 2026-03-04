@@ -1,235 +1,540 @@
 <?php
-// filepath: pages/reports/sales.php
-require_once __DIR__ . "/../../includes/check-auth.php";
-require_once __DIR__ . "/../../includes/helpers.php";
-require_once __DIR__ . "/../../config/database.php";
+// filepath: c:\xampp5\htdocs\Next-Level\rxpms\pages\reports\sales.php
 
-$isAdmin = ($_SESSION["role"] ?? "") === "admin";
-$csrfToken = generateCsrfToken();
+require_once __DIR__ . '/../../includes/check-auth.php';
+require_once __DIR__ . '/../../config/database.php';
+
+// Enable error reporting for debugging
+error_reporting(E_ALL);
+ini_set('display_errors', 1);
 
 try {
     $db = Database::getInstance();
     $conn = $db->getConnection();
 
-    // Filters & Pagination
-    $startDate = $_GET["start_date"] ?? date("Y-m-01"); 
-    $endDate = $_GET["end_date"] ?? date("Y-m-t"); 
-    $paymentMethod = $_GET["payment_method"] ?? "all";
-    $page = max(1, intval($_GET["p"] ?? 1));
-    $perPage = 15; 
-    $offset = ($page - 1) * $perPage;
+    // Date filtering
+    $startDate = $_GET['start_date'] ?? date('Y-m-01');
+    $endDate = $_GET['end_date'] ?? date('Y-m-t');
+    $paymentMethod = $_GET['payment_method'] ?? 'all';
 
-    // Daily Summary Pagination
-    $dPage = max(1, intval($_GET["dp"] ?? 1)); 
-    $dPerPage = 5; 
-    $dOffset = ($dPage - 1) * $dPerPage;
+    // Validate dates
+    $startDate = date('Y-m-d', strtotime($startDate));
+    $endDate = date('Y-m-d', strtotime($endDate));
 
-    // Main Transaction Count
-    $countQuery = "SELECT COUNT(DISTINCT s.id) FROM sales s LEFT JOIN payments p ON s.id = p.sale_id WHERE DATE(s.created_at) BETWEEN ? AND ?";
-    $countParams = [$startDate, $endDate];
-    if ($paymentMethod !== "all") { 
-        $countQuery .= " AND p.payment_method = ?"; 
-        $countParams[] = $paymentMethod; 
-    }
-    $countStmt = $conn->prepare($countQuery); 
-    $countStmt->execute($countParams);
-    $totalRecords = (int) $countStmt->fetchColumn(); 
-    $totalPages = max(1, ceil($totalRecords / $perPage));
-    $page = min($page, $totalPages); 
-    $offset = ($page - 1) * $perPage;
+    // Build query with payment filter
+    $query = "
+        SELECT 
+            s.id, 
+            s.total_amount,
+            s.created_at, 
+            u.name as sold_by,
+            u.id as sold_by_id,
+            COALESCE(p.payment_method, 'cash') as payment_method,
+            COALESCE(si_counts.cnt, 0) as items_count
+        FROM sales s
+        LEFT JOIN users u ON s.sold_by = u.id
+        LEFT JOIN payments p ON s.id = p.sale_id
+        LEFT JOIN (
+            SELECT sale_id, COUNT(*) as cnt FROM sale_items GROUP BY sale_id
+        ) si_counts ON s.id = si_counts.sale_id
+        WHERE DATE(s.created_at) BETWEEN ? AND ?
+    ";
 
-    // Main Transaction Query (Fixed Parameterized Pagination)
-    $query = "SELECT s.id, s.total_amount, s.created_at, u.name as sold_by, COALESCE(p.payment_method, 'cash') as payment_method, 
-        (SELECT GROUP_CONCAT(DISTINCT pr.name SEPARATOR ', ') FROM sale_items si JOIN products pr ON si.product_id = pr.id WHERE si.sale_id = s.id) as product_list 
-        FROM sales s LEFT JOIN users u ON s.sold_by = u.id LEFT JOIN payments p ON s.id = p.sale_id
-        WHERE DATE(s.created_at) BETWEEN ? AND ?";
     $params = [$startDate, $endDate];
-    if ($paymentMethod !== "all") { 
-        $query .= " AND p.payment_method = ?"; 
-        $params[] = $paymentMethod; 
+
+    if ($paymentMethod !== 'all') {
+        $query .= " AND p.payment_method = ?";
+        $params[] = $paymentMethod;
     }
-    $query .= " ORDER BY s.created_at DESC LIMIT " . (int)$perPage . " OFFSET " . (int)$offset;
-    $stmt = $conn->prepare($query); 
-    $stmt->execute($params); 
+
+    $query .= " ORDER BY s.created_at DESC";
+
+    $stmt = $conn->prepare($query);
+    $stmt->execute($params);
     $sales = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
-    // Stats (Fixed to respect payment method)
-    $sumQ = "SELECT SUM(s.total_amount) as total_rev, COUNT(*) as trans_count FROM sales s LEFT JOIN payments p ON s.id = p.sale_id WHERE DATE(s.created_at) BETWEEN ? AND ?";
-    $sumParams = [$startDate, $endDate];
-    if ($paymentMethod !== "all") {
-        $sumQ .= " AND p.payment_method = ?";
-        $sumParams[] = $paymentMethod;
+    // Calculate statistics
+    $totalSales = array_reduce($sales, fn($sum, $sale) => $sum + (float) ($sale['total_amount'] ?? 0), 0);
+    $totalTransactions = count($sales);
+    $avgSaleValue = $totalTransactions > 0 ? $totalSales / $totalTransactions : 0;
+
+    // Get sales trend data for chart (last 30 days)
+    $trendQuery = "
+        SELECT 
+            DATE(created_at) as sale_date,
+            SUM(total_amount) as daily_total,
+            COUNT(*) as transaction_count
+        FROM sales
+        WHERE created_at >= DATE_SUB(CURDATE(), INTERVAL 30 DAY)
+        GROUP BY DATE(created_at)
+        ORDER BY sale_date ASC
+    ";
+    $trendStmt = $conn->query($trendQuery);
+    $trendData = $trendStmt->fetchAll(PDO::FETCH_ASSOC);
+
+    // Prepare chart data
+    $chartLabels = [];
+    $chartValues = [];
+    $chartCounts = [];
+
+    for ($i = 29; $i >= 0; $i--) {
+        $date = date('Y-m-d', strtotime("-$i days"));
+        $chartLabels[] = date('M j', strtotime($date));
+
+        // Find matching data or use 0
+        $found = false;
+        foreach ($trendData as $trend) {
+            if ($trend['sale_date'] === $date) {
+                $chartValues[] = (float) $trend['daily_total'];
+                $chartCounts[] = (int) $trend['transaction_count'];
+                $found = true;
+                break;
+            }
+        }
+        if (!$found) {
+            $chartValues[] = 0;
+            $chartCounts[] = 0;
+        }
     }
-    $sumStmt = $conn->prepare($sumQ);
-    $sumStmt->execute($sumParams); 
-    $stats = $sumStmt->fetch(PDO::FETCH_ASSOC);
-    $totalRevenue = (float)($stats["total_rev"] ?? 0); 
-    $totalTransactions = (int)($stats["trans_count"] ?? 0); 
-    $avgSaleValue = $totalTransactions > 0 ? $totalRevenue / $totalTransactions : 0;
 
-    // Daily Summary (Fixed Parameterized Pagination)
-    $dCountStmt = $conn->prepare("SELECT COUNT(DISTINCT DATE(created_at)) FROM sales WHERE DATE(created_at) BETWEEN ? AND ?"); 
-    $dCountStmt->execute([$startDate, $endDate]);
-    $totalDPages = max(1, ceil($dCountStmt->fetchColumn() / $dPerPage));
-    $dailySummary = $conn->prepare("SELECT DATE(created_at) as sale_date, COUNT(*) as transactions, SUM(total_amount) as revenue FROM sales WHERE DATE(created_at) BETWEEN ? AND ? GROUP BY DATE(created_at) ORDER BY sale_date DESC LIMIT " . (int)$dPerPage . " OFFSET " . (int)$dOffset);
-    $dailySummary->execute([$startDate, $endDate]); 
-    $dailySummary = $dailySummary->fetchAll(PDO::FETCH_ASSOC);
+    // Get payment method breakdown
+    $paymentBreakdownQuery = "
+        SELECT 
+            COALESCE(p.payment_method, 'cash') as method,
+            COUNT(s.id) as count,
+            SUM(s.total_amount) as total
+        FROM sales s
+        LEFT JOIN payments p ON s.id = p.sale_id
+        WHERE DATE(s.created_at) BETWEEN :startDate AND :endDate
+        GROUP BY COALESCE(p.payment_method, 'cash')
+    ";
+    $paymentStmt = $conn->prepare($paymentBreakdownQuery);
+    $paymentStmt->execute([':startDate' => $startDate, ':endDate' => $endDate]);
+    $paymentBreakdown = $paymentStmt->fetchAll(PDO::FETCH_ASSOC);
 
-    // Trend Data (Last 30 days or period)
-    $trendQuery = "SELECT DATE(created_at) as sale_date, SUM(total_amount) as revenue 
-                   FROM sales 
-                   WHERE DATE(created_at) BETWEEN ? AND ? 
-                   GROUP BY DATE(created_at) 
-                   ORDER BY sale_date ASC";
-    $trendStmt = $conn->prepare($trendQuery);
-    $trendStmt->execute([$startDate, $endDate]);
-    $trendData = $trendStmt->fetchAll(PDO::FETCH_KEY_PAIR);
-    
-    $chartLabels = []; $chartValues = [];
-    $current = new DateTime($startDate); $stop = new DateTime($endDate); $stop->modify('+1 day');
-    while ($current < $stop) {
-        $dateStr = $current->format('Y-m-d');
-        $chartLabels[] = $current->format('M j');
-        $chartValues[] = (float)($trendData[$dateStr] ?? 0);
-        $current->modify('+1 day');
+    $dailyItemQuery = "
+        SELECT 
+            DATE(s.created_at) as sale_date,
+            p.name as product_name,
+            SUM(si.quantity) as total_qty,
+            SUM(si.total) as total_revenue
+        FROM sale_items si
+        JOIN sales s ON si.sale_id = s.id
+        JOIN products p ON si.product_id = p.id
+        WHERE DATE(s.created_at) BETWEEN ? AND ?
+        GROUP BY DATE(s.created_at), p.id
+        ORDER BY sale_date DESC, total_revenue DESC
+    ";
+    $dailyItemStmt = $conn->prepare($dailyItemQuery);
+    $dailyItemStmt->execute([$startDate, $endDate]);
+    $dailyItems = $dailyItemStmt->fetchAll(PDO::FETCH_ASSOC);
+
+    $groupedDailyItems = [];
+    foreach ($dailyItems as $item) {
+        $date = $item['sale_date'];
+        if (!isset($groupedDailyItems[$date])) {
+            $groupedDailyItems[$date] = [
+                'items' => [],
+                'total_revenue' => 0
+            ];
+        }
+        $groupedDailyItems[$date]['items'][] = $item;
+        $groupedDailyItems[$date]['total_revenue'] += (float) $item['total_revenue'];
     }
 
-} catch (Exception $e) { 
-    error_log($e->getMessage()); 
-    die("<div class='p-10 text-center bg-rose-50 text-rose-600 rounded-3xl font-bold'>Error loading sales report.</div>"); 
+} catch (Exception $e) {
+    error_log('Sales Report Error: ' . $e->getMessage());
+    echo "<div class='p-4 bg-rose-100 border border-rose-200 rounded-lg text-rose-800'>";
+    echo "<strong>Error:</strong> " . htmlspecialchars($e->getMessage());
+    echo "</div>";
+    exit;
 }
 ?>
 
-<div class="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
-    <div class="flex flex-col md:flex-row md:items-center justify-between gap-4">
-        <div class="flex items-center gap-4">
-            <a href="?page=reports" class="w-10 h-10 bg-blue-600 text-white rounded-xl flex items-center justify-center hover:bg-blue-700 transition-colors shadow-lg shadow-blue-500/20">
-                <i class="fas fa-arrow-left"></i>
-            </a>
-            <div>
-                <h1 class="text-2xl font-black text-slate-900 tracking-tight">Sales Report</h1>
-                <p class="text-sm font-medium text-slate-400">Detailed analysis of sales transactions.</p>
-            </div>
+<div class="space-y-6">
+    <!-- Header -->
+    <div class="flex items-center justify-between">
+        <div>
+            <h1 class="text-2xl font-bold text-gray-900">Sales Report</h1>
+            <p class="text-gray-500">Detailed analysis of sales transactions.</p>
         </div>
         <div class="flex items-center gap-3">
-             <button onclick="window.print()" class="px-6 py-2.5 bg-white border border-slate-200 text-slate-600 rounded-xl font-bold flex items-center gap-2 hover:bg-slate-50 transition-all active:scale-95 shadow-sm">
-                <i class="fas fa-print"></i>
-                Print
-            </button>
-            <button onclick="window.location.href = 'api/reports/download.php?report=sales&start_date=<?= $startDate ?>&end_date=<?= $endDate ?>&payment_method=<?= $paymentMethod ?>'" class="px-6 py-2.5 bg-blue-600 text-white rounded-xl font-bold flex items-center gap-2 hover:bg-blue-700 transition-all shadow-lg shadow-blue-500/20 active:scale-95">
-                <i class="fas fa-file-export"></i>
-                Export Report
-            </button>
+            <a href="?page=reports"
+                class="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-all">
+                <i class="fas fa-arrow-left mr-2"></i>Back to Reports
+            </a>
+            <a href="<?php echo defined('BASE_URL') ? BASE_URL : '/Next-Level/rxpms'; ?>/api/reports/download.php?report=sales&start_date=<?= urlencode($startDate) ?>&end_date=<?= urlencode($endDate) ?><?= $paymentMethod !== 'all' ? '&payment_method=' . urlencode($paymentMethod) : '' ?>"
+                class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-all">
+                <i class="fas fa-download mr-2"></i>Export CSV
+            </a>
         </div>
     </div>
 
-    <!-- Enhanced Horizontal Filters -->
-    <div class="glassmorphism p-3 rounded-[24px] border border-white/40 shadow-sm bg-gradient-to-r from-blue-500/5 to-transparent">
-        <form method="GET" class="flex flex-wrap items-end gap-x-6 gap-y-4 p-2">
+    <!-- Filters -->
+    <div class="glassmorphism rounded-2xl p-6">
+        <form method="GET" class="grid grid-cols-1 md:grid-cols-5 gap-4 items-end">
             <input type="hidden" name="page" value="reports">
             <input type="hidden" name="view" value="sales">
-            
-            <div class="flex-1 min-w-[180px]">
-                <label class="text-[10px] uppercase font-black text-slate-500 mb-1.5 ml-1 flex items-center gap-1.5"><i class="fas fa-calendar-alt text-blue-500/60"></i> Starting At</label>
-                <input type="date" name="start_date" value="<?= $startDate ?>" class="w-full bg-white border-2 border-slate-100 rounded-2xl px-4 py-2.5 text-sm font-bold text-slate-700 focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 transition-all cursor-pointer">
+
+            <div>
+                <label for="start_date" class="block text-sm font-medium text-gray-700 mb-1">Date From</label>
+                <input type="date" name="start_date" id="start_date" value="<?= htmlspecialchars($startDate) ?>"
+                    class="w-full px-3 py-2 bg-white border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all">
             </div>
-            <div class="flex-1 min-w-[180px]">
-                <label class="text-[10px] uppercase font-black text-slate-500 mb-1.5 ml-1 flex items-center gap-1.5"><i class="fas fa-calendar-check text-blue-500/60"></i> Ending At</label>
-                <input type="date" name="end_date" value="<?= $endDate ?>" class="w-full bg-white border-2 border-slate-100 rounded-2xl px-4 py-2.5 text-sm font-bold text-slate-700 focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 transition-all cursor-pointer">
+
+            <div>
+                <label for="end_date" class="block text-sm font-medium text-gray-700 mb-1">Date To</label>
+                <input type="date" name="end_date" id="end_date" value="<?= htmlspecialchars($endDate) ?>"
+                    class="w-full px-3 py-2 bg-white border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all">
             </div>
-            <div class="flex-1 min-w-[200px]">
-                <label class="text-[10px] uppercase font-black text-slate-500 mb-1.5 ml-1 flex items-center gap-1.5"><i class="fas fa-credit-card text-blue-500/60"></i> Method</label>
-                <select name="payment_method" class="w-full bg-white border-2 border-slate-100 rounded-2xl px-4 py-2.5 text-sm font-bold text-slate-700 focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 transition-all">
-                    <option value="all">All Methods</option>
-                    <option value="cash" <?= $paymentMethod=="cash"?"selected":""?>>Cash Only</option>
-                    <option value="card" <?= $paymentMethod=="card"?"selected":""?>>Card/POS</option>
-                    <option value="mobile_money" <?= $paymentMethod=="mobile_money"?"selected":""?>>Mobile Money</option>
+
+            <div>
+                <label for="payment_method" class="block text-sm font-medium text-gray-700 mb-1">Payment Method</label>
+                <select name="payment_method" id="payment_method"
+                    class="w-full px-3 py-2 bg-white border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all">
+                    <option value="all" <?= $paymentMethod === 'all' ? 'selected' : '' ?>>All Methods</option>
+                    <option value="cash" <?= $paymentMethod === 'cash' ? 'selected' : '' ?>>Cash</option>
+                    <option value="card" <?= $paymentMethod === 'card' ? 'selected' : '' ?>>Card</option>
+                    <option value="mobile_money" <?= $paymentMethod === 'mobile_money' ? 'selected' : '' ?>>Mobile Money
+                    </option>
+                    <option value="bank_transfer" <?= $paymentMethod === 'bank_transfer' ? 'selected' : '' ?>>Bank Transfer
+                    </option>
                 </select>
             </div>
-            <div class="flex shrink-0">
-                <button type="submit" class="bg-slate-900 hover:bg-black text-white px-8 py-3 rounded-2xl font-black text-sm transition-all shadow-xl shadow-slate-900/10 flex items-center gap-2 group">
-                    <i class="fas fa-sync-alt text-xs group-hover:rotate-180 transition-transform duration-500"></i> Update Report
+
+            <div class="md:col-span-2 flex gap-2">
+                <button type="submit"
+                    class="flex-1 px-5 py-2 bg-blue-600 text-white rounded-xl font-semibold hover:bg-blue-700 transition-all flex items-center justify-center gap-2">
+                    <i class="fas fa-filter"></i>
+                    <span>Apply Filters</span>
                 </button>
+                <?php if ($paymentMethod !== 'all' || $startDate !== date('Y-m-01') || $endDate !== date('Y-m-t')): ?>
+                    <a href="?page=reports&view=sales"
+                        class="px-4 py-2 bg-gray-200 text-gray-700 rounded-xl font-semibold hover:bg-gray-300 transition-all flex items-center gap-2">
+                        <i class="fas fa-times"></i>
+                    </a>
+                <?php endif; ?>
             </div>
         </form>
     </div>
 
-    <!-- Analytics Dashboard -->
-    <div class="grid grid-cols-1 lg:grid-cols-4 gap-6">
-        <div class="lg:col-span-3 glassmorphism p-8 rounded-[32px] border border-white/40 shadow-sm bg-white min-h-[400px]">
-             <h3 class="text-xl font-black text-slate-900 tracking-tight mb-8">Sales Analysis</h3>
-             <div class="relative flex-grow h-[350px]"><canvas id="salesTrendChart"></canvas></div>
+    <!-- Sales Trend Chart -->
+    <div class="glassmorphism rounded-2xl p-6 shadow-lg">
+        <h3 class="text-lg font-bold text-gray-900 mb-4">Sales Trend (Last 30 Days)</h3>
+        <div style="position: relative; height: 300px;">
+            <canvas id="salesTrendChart"></canvas>
         </div>
-        <div class="lg:col-span-1 flex flex-col gap-6">
-            <div class="glassmorphism p-8 rounded-[32px] border border-white/40 shadow-sm bg-gradient-to-br from-blue-600 to-blue-700 text-white">
-                <p class="text-xs font-black text-white/60 uppercase tracking-widest mb-1">Total Revenue</p>
-                <h4 class="text-2xl font-black">MWK <?= number_format($totalRevenue, 2) ?></h4>
+    </div>
+
+    <!-- Summary Cards -->
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <div class="glassmorphism rounded-2xl p-6 flex items-center gap-4">
+            <div class="w-12 h-12 bg-blue-100 rounded-xl flex items-center justify-center">
+                <i class="fas fa-dollar-sign text-blue-600 text-2xl"></i>
             </div>
-            <div class="glassmorphism p-8 rounded-[32px] bg-white border border-slate-100 shadow-sm">
-                <p class="text-xs font-black text-slate-400 uppercase tracking-widest mb-1">Total Sales</p>
-                <h4 class="text-3xl font-black text-slate-900"><?= number_format($totalTransactions) ?></h4>
+            <div>
+                <h3 class="text-sm font-semibold text-gray-600 mb-1">Total Revenue</h3>
+                <p class="text-2xl font-bold text-gray-900">MWK <?= number_format($totalSales, 2) ?></p>
             </div>
-            <div class="glassmorphism p-8 rounded-[32px] bg-white border border-slate-100 shadow-sm">
-                <p class="text-xs font-black text-slate-400 uppercase tracking-widest mb-1">Avg Sale</p>
-                <h4 class="text-xl font-black text-slate-900">MWK <?= number_format($avgSaleValue, 0) ?></h4>
+        </div>
+
+        <div class="glassmorphism rounded-2xl p-6 flex items-center gap-4">
+            <div class="w-12 h-12 bg-emerald-100 rounded-xl flex items-center justify-center">
+                <i class="fas fa-receipt text-emerald-600 text-2xl"></i>
+            </div>
+            <div>
+                <h3 class="text-sm font-semibold text-gray-600 mb-1">Total Transactions</h3>
+                <p class="text-2xl font-bold text-gray-900"><?= number_format($totalTransactions) ?></p>
+            </div>
+        </div>
+
+        <div class="glassmorphism rounded-2xl p-6 flex items-center gap-4">
+            <div class="w-12 h-12 bg-amber-100 rounded-xl flex items-center justify-center">
+                <i class="fas fa-balance-scale text-amber-600 text-2xl"></i>
+            </div>
+            <div>
+                <h3 class="text-sm font-semibold text-gray-600 mb-1">Average Sale Value</h3>
+                <p class="text-2xl font-bold text-gray-900">MWK <?= number_format($avgSaleValue, 2) ?></p>
             </div>
         </div>
     </div>
 
-    <!-- Data Sections -->
-    <div class="grid grid-cols-1 lg:grid-cols-4 gap-6">
-        <div class="lg:col-span-1 glassmorphism p-6 rounded-[32px] bg-white border border-white/40 shadow-sm">
-            <h3 class="text-lg font-black text-slate-900 mb-6 tracking-tight">Daily Summary</h3>
-            <div class="space-y-3">
-                <?php foreach($dailySummary as $day): ?>
-                    <div class="p-4 bg-slate-50/50 rounded-2xl flex justify-between items-center">
-                        <div>
-                            <p class="text-xs font-black text-slate-800"><?= date("M j, Y", strtotime($day["sale_date"])) ?></p>
-                            <p class="text-[10px] font-bold text-slate-400"><?= $day["transactions"] ?> sales</p>
+    <!-- Daily Itemized Summary -->
+    <div class="glassmorphism rounded-2xl p-6">
+        <div class="flex items-center justify-between mb-6">
+            <h3 class="text-lg font-bold text-gray-900">Daily Itemized Summary</h3>
+            <span
+                class="text-xs font-medium text-gray-400 bg-gray-50 px-3 py-1 rounded-full border border-gray-100 italic">Sorted
+                by revenue per day</span>
+        </div>
+
+        <?php if (empty($groupedDailyItems)): ?>
+            <div class="text-center py-10 text-gray-500">
+                <i class="fas fa-list-ul text-3xl mb-3 opacity-20"></i>
+                <p>No itemized data available for the selected period.</p>
+            </div>
+        <?php else: ?>
+            <div class="space-y-6">
+                <?php foreach ($groupedDailyItems as $date => $data): ?>
+                    <div class="border border-gray-100 rounded-2xl overflow-hidden shadow-sm hover:shadow-md transition-shadow">
+                        <div class="bg-gray-50/80 px-4 py-3 border-b border-gray-100 flex items-center justify-between">
+                            <span class="font-bold text-gray-700 flex items-center gap-2">
+                                <i class="far fa-calendar-alt text-blue-500"></i>
+                                <?= date('l, M j, Y', strtotime($date)) ?>
+                            </span>
+                            <span class="text-sm font-bold text-blue-600">
+                                Day Total: MWK <?= number_format($data['total_revenue'], 2) ?>
+                            </span>
                         </div>
-                        <p class="text-sm font-black text-emerald-600">MWK <?= number_format($day["revenue"], 0) ?></p>
+                        <div class="overflow-x-auto">
+                            <table class="w-full text-sm">
+                                <thead class="bg-white text-gray-500 font-semibold uppercase text-[10px] tracking-wider">
+                                    <tr>
+                                        <th class="px-6 py-3 text-left">Product / Item Name</th>
+                                        <th class="px-6 py-3 text-center">Qty Sold</th>
+                                        <th class="px-6 py-3 text-right">Revenue</th>
+                                    </tr>
+                                </thead>
+                                <tbody class="divide-y divide-gray-50">
+                                    <?php foreach ($data['items'] as $item): ?>
+                                        <tr class="hover:bg-blue-50/30 transition-colors">
+                                            <td class="px-6 py-3 font-medium text-gray-900">
+                                                <?= htmlspecialchars($item['product_name']) ?>
+                                            </td>
+                                            <td class="px-6 py-3 text-center">
+                                                <span
+                                                    class="px-2 py-0.5 bg-gray-100 text-gray-700 rounded-md font-semibold text-xs">
+                                                    <?= $item['total_qty'] ?>
+                                                </span>
+                                            </td>
+                                            <td class="px-6 py-3 text-right font-bold text-gray-900">MWK
+                                                <?= number_format($item['total_revenue'], 2) ?>
+                                            </td>
+                                        </tr>
+                                    <?php endforeach; ?>
+                                </tbody>
+                            </table>
+                        </div>
                     </div>
                 <?php endforeach; ?>
             </div>
-        </div>
-        <div class="lg:col-span-3 glassmorphism rounded-[32px] bg-white border border-white/40 shadow-sm overflow-hidden">
-             <table class="w-full">
-                <thead>
-                    <tr class="bg-slate-50/50 text-left border-b border-slate-50">
-                        <th class="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">ID</th>
-                        <th class="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Description</th>
-                        <th class="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest text-center">Cashier</th>
-                        <th class="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest text-right">Amount</th>
+        <?php endif; ?>
+    </div>
+
+    <!-- Sales Table -->
+    <div class="glassmorphism rounded-2xl p-6">
+        <h3 class="text-lg font-bold text-gray-900 mb-4">Transaction Details</h3>
+        <div class="overflow-x-auto">
+            <table class="min-w-full divide-y divide-gray-200">
+                <thead class="bg-gray-50">
+                    <tr>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Sale
+                            ID</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Date
+                            & Time</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                            Cashier</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Items
+                        </th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                            Payment</th>
+                        <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                            Total Amount</th>
                     </tr>
                 </thead>
-                <tbody class="divide-y divide-slate-50">
-                    <?php foreach ($sales as $s): ?>
-                        <tr class="hover:bg-slate-50/40 transition-colors">
-                            <td class="px-6 py-5 font-black text-slate-700 text-sm">#<?= str_pad($s["id"], 5, '0', STR_PAD_LEFT) ?></td>
-                            <td class="px-6 py-5">
-                                <p class="text-sm font-bold text-slate-800 truncate max-w-[240px]"><?= htmlspecialchars($s["product_list"] ?? "N/A") ?></p>
-                                <p class="text-[10px] font-black text-slate-400 mt-0.5"><?= date("M j, Y • H:i", strtotime($s["created_at"])) ?></p>
+                <tbody class="bg-white divide-y divide-gray-200">
+                    <?php if (empty($sales)): ?>
+                        <tr>
+                            <td colspan="6" class="px-6 py-12 text-center text-gray-500">
+                                <div class="flex flex-col items-center">
+                                    <i class="fas fa-inbox text-4xl text-gray-300 mb-3"></i>
+                                    <p class="text-lg font-medium">No sales found</p>
+                                    <p class="text-sm">Try adjusting your filters</p>
+                                </div>
                             </td>
-                            <td class="px-6 py-5 text-center">
-                                <span class="inline-flex px-3 py-1 bg-blue-50 text-blue-600 rounded-full text-[10px] font-black"><?= htmlspecialchars($s["sold_by"] ?? "System") ?></span>
-                            </td>
-                            <td class="px-6 py-5 text-sm font-black text-right text-slate-900">MWK <?= number_format($s["total_amount"], 2) ?></td>
                         </tr>
-                    <?php endforeach; ?>
+                    <?php else: ?>
+                        <?php foreach ($sales as $sale): ?>
+                            <tr class="hover:bg-gray-50 transition-colors">
+                                <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                                    #<?= str_pad($sale['id'], 5, '0', STR_PAD_LEFT) ?>
+                                </td>
+                                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                                    <?= date('M j, Y', strtotime($sale['created_at'])) ?>
+                                    <span class="text-gray-400">at <?= date('H:i', strtotime($sale['created_at'])) ?></span>
+                                </td>
+                                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                                    <i class="fas fa-user-circle mr-1 text-gray-400"></i>
+                                    <?= htmlspecialchars($sale['sold_by'] ?? 'Unknown') ?>
+                                </td>
+                                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                                    <span
+                                        class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                                        <?= $sale['items_count'] ?> item<?= $sale['items_count'] != 1 ? 's' : '' ?>
+                                    </span>
+                                </td>
+                                <td class="px-6 py-4 whitespace-nowrap text-sm">
+                                    <?php
+                                    $paymentIcons = [
+                                        'cash' => ['icon' => 'fa-money-bill-wave', 'bg' => 'bg-emerald-100', 'text' => 'text-emerald-800'],
+                                        'card' => ['icon' => 'fa-credit-card', 'bg' => 'bg-blue-100', 'text' => 'text-blue-800'],
+                                        'mobile_money' => ['icon' => 'fa-mobile-alt', 'bg' => 'bg-purple-100', 'text' => 'text-purple-800'],
+                                        'bank_transfer' => ['icon' => 'fa-university', 'bg' => 'bg-indigo-100', 'text' => 'text-indigo-800']
+                                    ];
+                                    $payment = $paymentIcons[$sale['payment_method']] ?? ['icon' => 'fa-question', 'bg' => 'bg-gray-100', 'text' => 'text-gray-800'];
+                                    ?>
+                                    <span
+                                        class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-medium <?= $payment['bg'] ?> <?= $payment['text'] ?>">
+                                        <i class="fas <?= $payment['icon'] ?>"></i>
+                                        <?= ucwords(str_replace('_', ' ', $sale['payment_method'])) ?>
+                                    </span>
+                                </td>
+                                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900 font-bold text-right">
+                                    MWK <?= number_format($sale['total_amount'], 2) ?>
+                                </td>
+                            </tr>
+                        <?php endforeach; ?>
+                    <?php endif; ?>
                 </tbody>
-             </table>
+                <?php if (!empty($sales)): ?>
+                    <tfoot class="bg-gray-50 font-semibold">
+                        <tr>
+                            <td colspan="6" class="px-6 py-4 text-right text-sm text-gray-700">Total:</td>
+                            <td class="px-6 py-4 text-right text-sm text-gray-900 font-bold">
+                                MWK <?= number_format($totalSales, 2) ?>
+                            </td>
+                        </tr>
+                    </tfoot>
+                <?php endif; ?>
+            </table>
         </div>
     </div>
 </div>
 
-<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <script>
-document.addEventListener("DOMContentLoaded", () => { 
-    const ctx = document.getElementById("salesTrendChart").getContext("2d");
-    new Chart(ctx, { 
-        type: "line", 
-        data: { labels: <?= json_encode($chartLabels) ?>, datasets: [{ data: <?= json_encode($chartValues) ?>, borderColor: "#3b82f6", borderWidth: 4, tension: 0.4, fill: true, backgroundColor: 'rgba(59, 130, 246, 0.1)' }] }, 
-        options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true, grid: { color: "#f8fafc" } }, x: { grid: { display: false } } } } 
-    }); 
-});
+    function printSale(sale) {
+        const printWindow = window.open('', '_blank');
+        const date = new Date(sale.created_at).toLocaleString();
+
+        // You might want to fetch line items here via AJAX if not available in $sale
+        // For now, printing basic info as requested
+
+        printWindow.document.write(`
+        <html>
+        <head>
+            <title>Sale Receipt #${sale.id}</title>
+            <style>
+                body { font-family: 'Courier New', monospace; padding: 20px; max-width: 300px; margin: 0 auto; }
+                .header { text-align: center; margin-bottom: 20px; border-bottom: 1px dashed #000; padding-bottom: 10px; }
+                .row { display: flex; justify-content: space-between; margin-bottom: 5px; }
+                .total { border-top: 1px dashed #000; margin-top: 10px; padding-top: 10px; font-weight: bold; }
+                .footer { text-align: center; margin-top: 20px; font-size: 12px; }
+                @media print { @page { margin: 0; } body { margin: 1cm; } }
+            </style>
+        </head>
+        <body>
+            <div class="header">
+                <h3>Next-Level Pharmacy</h3>
+                <p>Sale #${sale.id}</p>
+                <p>${date}</p>
+            </div>
+            <div class="content">
+                <div class="row">
+                    <span>Cashier:</span>
+                    <span>${sale.sold_by || 'Unknown'}</span>
+                </div>
+                <!-- Line items would go here -->
+                <div class="total row">
+                    <span>Total:</span>
+                    <span>MWK ${parseFloat(sale.total_amount).toFixed(2)}</span>
+                </div>
+                <div class="row">
+                    <span>Payment:</span>
+                    <span>${sale.payment_method || 'Cash'}</span>
+                </div>
+            </div>
+            <div class="footer">
+                <p>Thank you for your business!</p>
+            </div>
+            <script>
+                window.onload = function() { window.print(); window.close(); }
+            <\/script>
+        </body>
+        </html>
+    `);
+        printWindow.document.close();
+    }
 </script>
+
+<?php if (!empty($chartLabels) && !empty($chartValues)): ?>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', function () {
+            const ctx = document.getElementById('salesTrendChart');
+
+            if (!ctx) {
+                console.error('Canvas element not found');
+                return;
+            }
+
+            if (typeof Chart === 'undefined') {
+                console.error('Chart.js not loaded');
+                return;
+            }
+
+            new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: <?= json_encode($chartLabels) ?>,
+                    datasets: [{
+                        label: 'Daily Sales (MWK)',
+                        data: <?= json_encode($chartValues) ?>,
+                        borderColor: 'rgb(59, 130, 246)',
+                        backgroundColor: 'rgba(59, 130, 246, 0.1)',
+                        fill: true,
+                        tension: 0.4,
+                        pointRadius: 4,
+                        pointHoverRadius: 6,
+                        pointBackgroundColor: 'rgb(59, 130, 246)',
+                        pointBorderColor: '#fff',
+                        pointBorderWidth: 2
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { display: true },
+                        tooltip: {
+                            callbacks: {
+                                label: function (context) {
+                                    return 'MWK ' + context.parsed.y.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+                                }
+                            }
+                        }
+                    },
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            ticks: {
+                                callback: function (value) {
+                                    return 'MWK ' + (value / 1000).toFixed(0) + 'k';
+                                }
+                            },
+                            grid: {
+                                color: 'rgba(0, 0, 0, 0.05)'
+                            }
+                        },
+                        x: {
+                            grid: { display: false },
+                            ticks: {
+                                maxRotation: 45,
+                                minRotation: 45
+                            }
+                        }
+                    }
+                }
+            });
+        });
+    </script>
+<?php endif; ?>
