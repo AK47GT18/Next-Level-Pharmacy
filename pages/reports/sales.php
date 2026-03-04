@@ -101,21 +101,46 @@ try {
         if (!$found) { $chartValues[] = 0; $chartCounts[] = 0; }
     }
 
-    // ── DAILY ITEMIZED ────────────────────────────────────────────────────
-    $diQuery  = "SELECT DATE(s.created_at) AS sale_date, p.name AS product_name, SUM(si.quantity) AS total_qty, SUM(si.total) AS total_revenue FROM sale_items si JOIN sales s ON si.sale_id = s.id JOIN products p ON si.product_id = p.id WHERE DATE(s.created_at) BETWEEN ? AND ?";
-    $diParams = [$startDate, $endDate];
-    if ($dayFilter !== '') { $diQuery .= " AND DAYNAME(s.created_at) = ?"; $diParams[] = $dayFilter; }
-    $diQuery .= " GROUP BY DATE(s.created_at), p.id ORDER BY sale_date DESC, total_revenue DESC";
-    $diStmt = $conn->prepare($diQuery);
-    $diStmt->execute($diParams);
-    $dailyItems = $diStmt->fetchAll(PDO::FETCH_ASSOC);
-
+    // ── DAILY ITEMIZED (only shown when a day filter is active, with pagination) ─
+    $diPerPage     = 5; // days per page
+    $diCurrentPage = isset($_GET['di_pg']) && is_numeric($_GET['di_pg']) ? max(1, (int)$_GET['di_pg']) : 1;
     $groupedDailyItems = [];
-    foreach ($dailyItems as $item) {
-        $d = $item['sale_date'];
-        if (!isset($groupedDailyItems[$d])) $groupedDailyItems[$d] = ['items' => [], 'total_revenue' => 0];
-        $groupedDailyItems[$d]['items'][]       = $item;
-        $groupedDailyItems[$d]['total_revenue'] += (float)$item['total_revenue'];
+    $diTotalPages = 1;
+
+    if ($dayFilter !== '') {
+        // Count distinct dates first
+        $diCountQuery  = "SELECT COUNT(DISTINCT DATE(s.created_at)) FROM sale_items si JOIN sales s ON si.sale_id = s.id JOIN products p ON si.product_id = p.id WHERE DATE(s.created_at) BETWEEN ? AND ? AND DAYNAME(s.created_at) = ?";
+        $diCountStmt   = $conn->prepare($diCountQuery);
+        $diCountStmt->execute([$startDate, $endDate, $dayFilter]);
+        $diTotalDates  = (int)$diCountStmt->fetchColumn();
+        $diTotalPages  = max(1, (int)ceil($diTotalDates / $diPerPage));
+        $diCurrentPage = min($diCurrentPage, $diTotalPages);
+        $diOffset      = ($diCurrentPage - 1) * $diPerPage;
+
+        // Get the paginated dates
+        $diDatesStmt = $conn->prepare("SELECT DISTINCT DATE(s.created_at) AS d FROM sales s WHERE DATE(s.created_at) BETWEEN ? AND ? AND DAYNAME(s.created_at) = ? ORDER BY d DESC LIMIT ? OFFSET ?");
+        $diDatesStmt->bindValue(1, $startDate);
+        $diDatesStmt->bindValue(2, $endDate);
+        $diDatesStmt->bindValue(3, $dayFilter);
+        $diDatesStmt->bindValue(4, $diPerPage, PDO::PARAM_INT);
+        $diDatesStmt->bindValue(5, $diOffset,  PDO::PARAM_INT);
+        $diDatesStmt->execute();
+        $diDates = array_column($diDatesStmt->fetchAll(PDO::FETCH_ASSOC), 'd');
+
+        if (!empty($diDates)) {
+            $inPlaceholders = implode(',', array_fill(0, count($diDates), '?'));
+            $diQuery  = "SELECT DATE(s.created_at) AS sale_date, p.name AS product_name, SUM(si.quantity) AS total_qty, SUM(si.total) AS total_revenue FROM sale_items si JOIN sales s ON si.sale_id = s.id JOIN products p ON si.product_id = p.id WHERE DATE(s.created_at) IN ($inPlaceholders) GROUP BY DATE(s.created_at), p.id ORDER BY sale_date DESC, total_revenue DESC";
+            $diStmt   = $conn->prepare($diQuery);
+            $diStmt->execute($diDates);
+            $dailyItems = $diStmt->fetchAll(PDO::FETCH_ASSOC);
+
+            foreach ($dailyItems as $item) {
+                $d = $item['sale_date'];
+                if (!isset($groupedDailyItems[$d])) $groupedDailyItems[$d] = ['items' => [], 'total_revenue' => 0];
+                $groupedDailyItems[$d]['items'][]       = $item;
+                $groupedDailyItems[$d]['total_revenue'] += (float)$item['total_revenue'];
+            }
+        }
     }
 
 } catch (Exception $e) {
@@ -125,10 +150,16 @@ try {
 }
 
 if (!function_exists("pgUrl")) {
-function pgUrl(int $pg): string {
-    $p = $_GET; $p['pg'] = $pg;
-    return '?' . http_build_query($p);
+    function pgUrl(int $pg): string {
+        $p = $_GET; $p['pg'] = $pg;
+        return '?' . http_build_query($p);
+    }
 }
+if (!function_exists("diPgUrl")) {
+    function diPgUrl(int $pg): string {
+        $p = $_GET; $p['di_pg'] = $pg;
+        return '?' . http_build_query($p);
+    }
 }
 ?>
 
@@ -271,17 +302,29 @@ function pgUrl(int $pg): string {
 
     <!-- Daily Itemized Summary -->
     <div class="glassmorphism rounded-2xl p-6">
-        <div class="flex items-center justify-between mb-6 flex-wrap gap-2">
-            <h3 class="text-lg font-bold text-gray-900">Daily Itemized Summary</h3>
-            <span class="text-xs font-medium text-gray-400 bg-gray-50 px-3 py-1 rounded-full border border-gray-100 italic">
-                Sorted by revenue per day
-            </span>
+        <div class="flex items-center justify-between mb-4 flex-wrap gap-2">
+            <div>
+                <h3 class="text-lg font-bold text-gray-900">Daily Itemized Summary</h3>
+                <p class="text-sm text-gray-400 mt-0.5">Select a weekday filter above to view itemized breakdowns</p>
+            </div>
+            <?php if ($dayFilter !== ''): ?>
+                <span class="text-xs font-medium text-gray-400 bg-gray-50 px-3 py-1 rounded-full border border-gray-100 italic">
+                    Sorted by revenue per day
+                </span>
+            <?php endif; ?>
         </div>
 
-        <?php if (empty($groupedDailyItems)): ?>
+        <?php if ($dayFilter === ''): ?>
+            <!-- Prompt to select a day -->
+            <div class="text-center py-12 border-2 border-dashed border-gray-200 rounded-2xl">
+                <i class="fas fa-calendar-week text-4xl text-gray-300 mb-3 block"></i>
+                <p class="font-semibold text-gray-500">No day selected</p>
+                <p class="text-sm text-gray-400 mt-1">Use the <span class="font-medium text-blue-500">Quick Filter</span> buttons above to pick a weekday and see its itemized sales</p>
+            </div>
+        <?php elseif (empty($groupedDailyItems)): ?>
             <div class="text-center py-12 text-gray-500">
                 <i class="fas fa-list-ul text-4xl mb-3 opacity-20 block"></i>
-                <p class="font-medium">No itemized data for the selected period.</p>
+                <p class="font-medium">No itemized data found for <?= htmlspecialchars($dayFilter) ?>s in this period.</p>
             </div>
         <?php else: ?>
             <div class="space-y-6">
@@ -321,6 +364,40 @@ function pgUrl(int $pg): string {
                     </div>
                 <?php endforeach; ?>
             </div>
+
+            <!-- Daily Itemized Pagination -->
+            <?php if ($diTotalPages > 1): ?>
+                <div class="mt-6 pt-5 border-t border-gray-100 flex items-center justify-between flex-wrap gap-4">
+                    <p class="text-sm text-gray-500">
+                        Showing page <span class="font-semibold text-gray-800"><?= $diCurrentPage ?></span>
+                        of <span class="font-semibold text-gray-800"><?= $diTotalPages ?></span>
+                        &mdash; <?= $diTotalDates ?> <?= htmlspecialchars($dayFilter) ?> dates total
+                    </p>
+                    <div class="flex items-center gap-1">
+                        <?php if ($diCurrentPage > 1): ?>
+                            <a href="<?= diPgUrl(1) ?>" title="First" class="w-9 h-9 flex items-center justify-center rounded-lg border border-gray-200 text-gray-500 hover:bg-gray-100 transition-all text-sm"><i class="fas fa-angle-double-left"></i></a>
+                            <a href="<?= diPgUrl($diCurrentPage - 1) ?>" title="Previous" class="w-9 h-9 flex items-center justify-center rounded-lg border border-gray-200 text-gray-500 hover:bg-gray-100 transition-all text-sm"><i class="fas fa-angle-left"></i></a>
+                        <?php endif; ?>
+                        <?php
+                        $diStart = max(1, $diCurrentPage - 2);
+                        $diEnd   = min($diTotalPages, $diCurrentPage + 2);
+                        if ($diStart > 1) echo '<span class="w-9 h-9 flex items-center justify-center text-gray-400 text-sm">…</span>';
+                        for ($dp = $diStart; $dp <= $diEnd; $dp++): ?>
+                            <a href="<?= diPgUrl($dp) ?>"
+                               class="w-9 h-9 flex items-center justify-center rounded-lg border text-sm font-semibold transition-all
+                                      <?= $dp === $diCurrentPage ? 'bg-blue-600 text-white border-blue-600 shadow-sm' : 'border-gray-200 text-gray-600 hover:bg-gray-100' ?>">
+                                <?= $dp ?>
+                            </a>
+                        <?php endfor;
+                        if ($diEnd < $diTotalPages) echo '<span class="w-9 h-9 flex items-center justify-center text-gray-400 text-sm">…</span>';
+                        ?>
+                        <?php if ($diCurrentPage < $diTotalPages): ?>
+                            <a href="<?= diPgUrl($diCurrentPage + 1) ?>" title="Next" class="w-9 h-9 flex items-center justify-center rounded-lg border border-gray-200 text-gray-500 hover:bg-gray-100 transition-all text-sm"><i class="fas fa-angle-right"></i></a>
+                            <a href="<?= diPgUrl($diTotalPages) ?>" title="Last" class="w-9 h-9 flex items-center justify-center rounded-lg border border-gray-200 text-gray-500 hover:bg-gray-100 transition-all text-sm"><i class="fas fa-angle-double-right"></i></a>
+                        <?php endif; ?>
+                    </div>
+                </div>
+            <?php endif; ?>
         <?php endif; ?>
     </div>
 
@@ -441,48 +518,44 @@ function pgUrl(int $pg): string {
         <?php if ($totalPages > 1): ?>
             <div class="mt-6 pt-5 border-t border-gray-100 flex items-center justify-between flex-wrap gap-4">
                 <p class="text-sm text-gray-500">
-                    Page <span class="font-semibold text-gray-800"><?= $currentPage ?></span>
-                    of <span class="font-semibold text-gray-800"><?= $totalPages ?></span>
-                    &mdash; <?= number_format($totalRecords) ?> total results
+                    <span class="font-semibold text-gray-800"><?= number_format($offset + 1) ?></span>–<span class="font-semibold text-gray-800"><?= number_format(min($offset + $perPage, $totalRecords)) ?></span>
+                    of <span class="font-semibold text-gray-800"><?= number_format($totalRecords) ?></span> transactions
                 </p>
-                <div class="flex items-center gap-1.5">
-                    <?php if ($currentPage > 1): ?>
-                        <a href="<?= pgUrl(1) ?>" title="First"
-                           class="px-3 py-2 rounded-lg border border-gray-200 text-sm text-gray-600 hover:bg-gray-100 transition-all">
-                            <i class="fas fa-angle-double-left"></i>
-                        </a>
-                        <a href="<?= pgUrl($currentPage - 1) ?>" title="Previous"
-                           class="px-3 py-2 rounded-lg border border-gray-200 text-sm text-gray-600 hover:bg-gray-100 transition-all">
-                            <i class="fas fa-angle-left"></i>
-                        </a>
-                    <?php endif; ?>
+                <div class="flex items-center gap-1">
+                    <!-- Prev -->
+                    <a href="<?= $currentPage > 1 ? pgUrl($currentPage - 1) : '#' ?>"
+                       class="w-9 h-9 flex items-center justify-center rounded-lg border text-sm transition-all
+                              <?= $currentPage > 1 ? 'border-gray-200 text-gray-600 hover:bg-gray-100' : 'border-gray-100 text-gray-300 cursor-not-allowed' ?>">
+                        <i class="fas fa-angle-left"></i>
+                    </a>
 
                     <?php
                     $pgStart = max(1, $currentPage - 2);
                     $pgEnd   = min($totalPages, $currentPage + 2);
-                    if ($pgStart > 1) echo '<span class="px-2 text-gray-400 text-sm self-center">…</span>';
-                    for ($pg = $pgStart; $pg <= $pgEnd; $pg++): ?>
+                    if ($pgStart > 1): ?>
+                        <a href="<?= pgUrl(1) ?>" class="w-9 h-9 flex items-center justify-center rounded-lg border border-gray-200 text-sm text-gray-600 hover:bg-gray-100 transition-all">1</a>
+                        <?php if ($pgStart > 2): ?><span class="w-9 h-9 flex items-center justify-center text-gray-400 text-sm">…</span><?php endif; ?>
+                    <?php endif; ?>
+
+                    <?php for ($pg = $pgStart; $pg <= $pgEnd; $pg++): ?>
                         <a href="<?= pgUrl($pg) ?>"
-                           class="px-3.5 py-2 rounded-lg border text-sm font-semibold transition-all
-                                  <?= $pg === $currentPage
-                                      ? 'bg-blue-600 text-white border-blue-600 shadow-sm'
-                                      : 'border-gray-200 text-gray-600 hover:bg-gray-100' ?>">
+                           class="w-9 h-9 flex items-center justify-center rounded-lg border text-sm font-semibold transition-all
+                                  <?= $pg === $currentPage ? 'bg-blue-600 text-white border-blue-600 shadow-sm' : 'border-gray-200 text-gray-600 hover:bg-gray-100' ?>">
                             <?= $pg ?>
                         </a>
-                    <?php endfor;
-                    if ($pgEnd < $totalPages) echo '<span class="px-2 text-gray-400 text-sm self-center">…</span>';
-                    ?>
+                    <?php endfor; ?>
 
-                    <?php if ($currentPage < $totalPages): ?>
-                        <a href="<?= pgUrl($currentPage + 1) ?>" title="Next"
-                           class="px-3 py-2 rounded-lg border border-gray-200 text-sm text-gray-600 hover:bg-gray-100 transition-all">
-                            <i class="fas fa-angle-right"></i>
-                        </a>
-                        <a href="<?= pgUrl($totalPages) ?>" title="Last"
-                           class="px-3 py-2 rounded-lg border border-gray-200 text-sm text-gray-600 hover:bg-gray-100 transition-all">
-                            <i class="fas fa-angle-double-right"></i>
-                        </a>
+                    <?php if ($pgEnd < $totalPages): ?>
+                        <?php if ($pgEnd < $totalPages - 1): ?><span class="w-9 h-9 flex items-center justify-center text-gray-400 text-sm">…</span><?php endif; ?>
+                        <a href="<?= pgUrl($totalPages) ?>" class="w-9 h-9 flex items-center justify-center rounded-lg border border-gray-200 text-sm text-gray-600 hover:bg-gray-100 transition-all"><?= $totalPages ?></a>
                     <?php endif; ?>
+
+                    <!-- Next -->
+                    <a href="<?= $currentPage < $totalPages ? pgUrl($currentPage + 1) : '#' ?>"
+                       class="w-9 h-9 flex items-center justify-center rounded-lg border text-sm transition-all
+                              <?= $currentPage < $totalPages ? 'border-gray-200 text-gray-600 hover:bg-gray-100' : 'border-gray-100 text-gray-300 cursor-not-allowed' ?>">
+                        <i class="fas fa-angle-right"></i>
+                    </a>
                 </div>
             </div>
         <?php endif; ?>
