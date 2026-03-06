@@ -23,11 +23,11 @@ try {
     $offset  = ($page - 1) * $perPage;
 
     // Count
-    $countQ = "SELECT COUNT(DISTINCT s.id) FROM sales s LEFT JOIN sale_items si ON s.id = si.sale_id WHERE DATE(s.created_at) = ?";
+    $countQ = "SELECT COUNT(DISTINCT s.id) FROM sales s LEFT JOIN sale_items si ON s.id = si.sale_id LEFT JOIN products p ON si.product_id = p.id WHERE DATE(s.created_at) = ?";
     $countP = [$dateFilter];
     if (!empty($searchId)){ $countQ .= " AND s.id = ?"; $countP[] = intval($searchId); }
     if (!empty($searchProduct)) { 
-        $countQ .= " AND si.product_id IN (SELECT id FROM products WHERE name LIKE ?)"; 
+        $countQ .= " AND p.name LIKE ?"; 
         $countP[] = '%' . $searchProduct . '%'; 
     }
 

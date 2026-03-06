@@ -67,7 +67,10 @@ document.addEventListener('DOMContentLoaded', () => {
             }
 
             try {
-                const baseUrl = window.location.origin + window.location.pathname.replace(/\/[^\/]*$/, '');
+                // Get base URL more reliably
+                const baseUrl = window.location.origin + (window.location.pathname.includes('/index.php') ? 
+                    window.location.pathname.replace('/index.php', '') : 
+                    window.location.pathname.replace(/\/[^\/]*$/, ''));
                 const response = await fetch(`${baseUrl}/api/search.php?q=${encodeURIComponent(query)}`);
                 const data = await response.json();
 

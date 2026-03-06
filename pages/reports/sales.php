@@ -832,7 +832,12 @@ async function saveSaleChanges() {
             })
         });
         const data = await res.json();
-        if (data.status === 'success') { location.reload(); }
+        if (data.status === 'success') { 
+            if (data.deleted) {
+                alert('Sale has been deleted (all items removed)');
+            }
+            location.reload(); 
+        }
         else { alert(data.message); btn.disabled = false; btn.innerHTML = orig; }
     } catch {
         alert('A network error occurred.'); btn.disabled = false; btn.innerHTML = orig;
@@ -937,6 +942,12 @@ async function confirmDeleteItems() {
         });
         const data = await res.json();
         if (data.status === 'success') { 
+            // Check if sale was deleted (all items removed)
+            if (data.deleted) {
+                alert('Sale has been deleted (all items removed)');
+                location.reload();
+                return;
+            }
             // Check if there are remaining items
             const remainingItems = document.querySelectorAll('.delete-item-checkbox:not(:checked)');
             if (remainingItems.length === 0) {

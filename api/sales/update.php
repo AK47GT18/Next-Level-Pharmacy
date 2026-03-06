@@ -91,6 +91,20 @@ try {
 
     $conn->prepare("UPDATE sales SET total_amount = ? WHERE id = ?")->execute([$newTotal, $saleId]);
     $conn->prepare("UPDATE payments SET amount = ? WHERE sale_id = ?")->execute([$newTotal, $saleId]);
+    
+    // Check if all items were removed - delete the sale if so
+    $checkStmt = $conn->prepare("SELECT COUNT(*) FROM sale_items WHERE sale_id = ?");
+    $checkStmt->execute([$saleId]);
+    $remainingItems = (int)$checkStmt->fetchColumn();
+    
+    if ($remainingItems === 0) {
+        // Delete the sale and payment record
+        $conn->prepare("DELETE FROM payments WHERE sale_id = ?")->execute([$saleId]);
+        $conn->prepare("DELETE FROM sales WHERE id = ?")->execute([$saleId]);
+        $conn->commit();
+        echo json_encode(["status" => "success", "message" => "Sale deleted (all items removed)", "deleted" => true]);
+        exit;
+    }
 
     $conn->commit();
     echo json_encode(["status" => "success", "message" => "Sale updated successfully", "new_total" => $newTotal]);
