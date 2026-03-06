@@ -1,5 +1,5 @@
 <?php
-// filepath: c:\xampp5\htdocs\Next-Level\rxpms\pages\reports\sales.php
+// filepath: pages/reports/sales.php
 
 require_once __DIR__ . '/../../includes/check-auth.php';
 require_once __DIR__ . '/../../config/database.php';
@@ -16,9 +16,8 @@ try {
     $endDate       = $_GET['end_date']       ?? date('Y-m-t');
     $paymentMethod = $_GET['payment_method'] ?? 'all';
     $saleIdSearch  = isset($_GET['sale_id']) && is_numeric($_GET['sale_id']) ? (int)$_GET['sale_id'] : null;
-    $dayFilter     = $_GET['day_filter']     ?? '';   // e.g. "Monday"
+    $dayFilter     = $_GET['day_filter']     ?? '';
 
-    // Validate dates
     $startDate = date('Y-m-d', strtotime($startDate));
     $endDate   = date('Y-m-d', strtotime($endDate));
 
@@ -68,7 +67,25 @@ try {
     $stmt->execute();
     $sales = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
-    // ── TOTALS (full filtered set) ────────────────────────────────────────
+    // ── Fetch product names for each sale on this page ────────────────────
+    $saleProducts = [];
+    if (!empty($sales)) {
+        $saleIds = array_column($sales, 'id');
+        $inPh    = implode(',', array_fill(0, count($saleIds), '?'));
+        $prodStmt = $conn->prepare("
+            SELECT si.sale_id, p.name AS product_name, si.quantity, si.price_at_sale, si.total, si.id AS sale_item_id
+            FROM sale_items si
+            JOIN products p ON si.product_id = p.id
+            WHERE si.sale_id IN ($inPh)
+            ORDER BY si.id ASC
+        ");
+        $prodStmt->execute($saleIds);
+        foreach ($prodStmt->fetchAll(PDO::FETCH_ASSOC) as $row) {
+            $saleProducts[$row['sale_id']][] = $row;
+        }
+    }
+
+    // ── TOTALS ────────────────────────────────────────────────────────────
     $totalsQuery  = "SELECT COUNT(*) AS tc, SUM(s.total_amount) AS ts FROM sales s LEFT JOIN payments p ON s.id = p.sale_id WHERE DATE(s.created_at) BETWEEN ? AND ?";
     $totalsParams = [$startDate, $endDate];
     if ($paymentMethod !== 'all') { $totalsQuery .= " AND COALESCE(p.payment_method,'cash') = ?"; $totalsParams[] = $paymentMethod; }
@@ -101,14 +118,13 @@ try {
         if (!$found) { $chartValues[] = 0; $chartCounts[] = 0; }
     }
 
-    // ── DAILY ITEMIZED (only shown when a day filter is active, with pagination) ─
-    $diPerPage     = 5; // days per page
+    // ── DAILY ITEMIZED ────────────────────────────────────────────────────
+    $diPerPage     = 5;
     $diCurrentPage = isset($_GET['di_pg']) && is_numeric($_GET['di_pg']) ? max(1, (int)$_GET['di_pg']) : 1;
     $groupedDailyItems = [];
     $diTotalPages = 1;
 
     if ($dayFilter !== '') {
-        // Count distinct dates first
         $diCountQuery  = "SELECT COUNT(DISTINCT DATE(s.created_at)) FROM sale_items si JOIN sales s ON si.sale_id = s.id JOIN products p ON si.product_id = p.id WHERE DATE(s.created_at) BETWEEN ? AND ? AND DAYNAME(s.created_at) = ?";
         $diCountStmt   = $conn->prepare($diCountQuery);
         $diCountStmt->execute([$startDate, $endDate, $dayFilter]);
@@ -117,7 +133,6 @@ try {
         $diCurrentPage = min($diCurrentPage, $diTotalPages);
         $diOffset      = ($diCurrentPage - 1) * $diPerPage;
 
-        // Get the paginated dates
         $diDatesStmt = $conn->prepare("SELECT DISTINCT DATE(s.created_at) AS d FROM sales s WHERE DATE(s.created_at) BETWEEN ? AND ? AND DAYNAME(s.created_at) = ? ORDER BY d DESC LIMIT ? OFFSET ?");
         $diDatesStmt->bindValue(1, $startDate);
         $diDatesStmt->bindValue(2, $endDate);
@@ -190,7 +205,6 @@ if (!function_exists("diPgUrl")) {
             <input type="hidden" name="view" value="sales">
             <input type="hidden" name="pg"   value="1">
 
-            <!-- Row 1: date / payment / sale-id / buttons -->
             <div class="grid grid-cols-1 md:grid-cols-6 gap-4 items-end">
                 <div>
                     <label class="block text-sm font-medium text-gray-700 mb-2">Date From</label>
@@ -240,7 +254,7 @@ if (!function_exists("diPgUrl")) {
                 </div>
             </div>
 
-            <!-- Row 2: Quick Day Filter buttons -->
+            <!-- Day Filter -->
             <div>
                 <label class="block text-sm font-medium text-gray-700 mb-2">
                     Quick Filter
@@ -315,7 +329,6 @@ if (!function_exists("diPgUrl")) {
         </div>
 
         <?php if ($dayFilter === ''): ?>
-            <!-- Prompt to select a day -->
             <div class="text-center py-12 border-2 border-dashed border-gray-200 rounded-2xl">
                 <i class="fas fa-calendar-week text-4xl text-gray-300 mb-3 block"></i>
                 <p class="font-semibold text-gray-500">No day selected</p>
@@ -365,7 +378,6 @@ if (!function_exists("diPgUrl")) {
                 <?php endforeach; ?>
             </div>
 
-            <!-- Daily Itemized Pagination -->
             <?php if ($diTotalPages > 1): ?>
                 <div class="mt-6 pt-5 border-t border-gray-100 flex items-center justify-between flex-wrap gap-4">
                     <p class="text-sm text-gray-500">
@@ -429,7 +441,7 @@ if (!function_exists("diPgUrl")) {
                         <th class="px-5 py-4 text-left   text-xs font-semibold text-gray-500 uppercase tracking-wider whitespace-nowrap">Sale ID</th>
                         <th class="px-5 py-4 text-left   text-xs font-semibold text-gray-500 uppercase tracking-wider whitespace-nowrap">Date &amp; Time</th>
                         <th class="px-5 py-4 text-left   text-xs font-semibold text-gray-500 uppercase tracking-wider whitespace-nowrap">Cashier</th>
-                        <th class="px-5 py-4 text-center text-xs font-semibold text-gray-500 uppercase tracking-wider whitespace-nowrap">Items</th>
+                        <th class="px-5 py-4 text-left   text-xs font-semibold text-gray-500 uppercase tracking-wider">Products</th>
                         <th class="px-5 py-4 text-left   text-xs font-semibold text-gray-500 uppercase tracking-wider whitespace-nowrap">Payment</th>
                         <th class="px-5 py-4 text-right  text-xs font-semibold text-gray-500 uppercase tracking-wider whitespace-nowrap">Total Amount</th>
                         <th class="px-5 py-4 text-center text-xs font-semibold text-gray-500 uppercase tracking-wider whitespace-nowrap">Actions</th>
@@ -455,41 +467,77 @@ if (!function_exists("diPgUrl")) {
                             'bank_transfer' => ['icon'=>'fa-university',      'bg'=>'bg-indigo-100', 'text'=>'text-indigo-800'],
                         ];
                         foreach ($sales as $sale):
-                            $pm = $paymentIcons[$sale['payment_method']] ?? ['icon'=>'fa-question','bg'=>'bg-gray-100','text'=>'text-gray-800'];
+                            $pm       = $paymentIcons[$sale['payment_method']] ?? ['icon'=>'fa-question','bg'=>'bg-gray-100','text'=>'text-gray-800'];
+                            $products = $saleProducts[$sale['id']] ?? [];
                         ?>
-                            <tr class="hover:bg-gray-50/70 transition-colors">
+                            <tr class="hover:bg-gray-50/70 transition-colors align-top">
+                                <!-- Sale ID -->
                                 <td class="px-5 py-4 whitespace-nowrap text-sm font-bold text-gray-800">
                                     #<?= str_pad($sale['id'], 5, '0', STR_PAD_LEFT) ?>
                                 </td>
+                                <!-- Date & Time -->
                                 <td class="px-5 py-4 whitespace-nowrap text-sm">
                                     <div class="font-medium text-gray-800"><?= date('M j, Y', strtotime($sale['created_at'])) ?></div>
                                     <div class="text-xs text-gray-400 mt-0.5"><?= date('H:i', strtotime($sale['created_at'])) ?> &middot; <?= date('l', strtotime($sale['created_at'])) ?></div>
                                 </td>
+                                <!-- Cashier -->
                                 <td class="px-5 py-4 whitespace-nowrap text-sm text-gray-700">
                                     <div class="flex items-center gap-2">
                                         <i class="fas fa-user-circle text-gray-400"></i>
                                         <?= htmlspecialchars($sale['sold_by'] ?? 'Unknown') ?>
                                     </div>
                                 </td>
-                                <td class="px-5 py-4 whitespace-nowrap text-center">
-                                    <span class="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold bg-blue-100 text-blue-800">
-                                        <?= $sale['items_count'] ?> item<?= $sale['items_count'] != 1 ? 's' : '' ?>
-                                    </span>
+                                <!-- Products -->
+                                <td class="px-5 py-4 text-sm min-w-[200px]">
+                                    <?php if (empty($products)): ?>
+                                        <span class="text-gray-300 text-xs italic">No items</span>
+                                    <?php else: ?>
+                                        <div class="space-y-1">
+                                            <?php foreach ($products as $prod): ?>
+                                                <div class="flex items-center gap-2">
+                                                    <span class="inline-flex items-center justify-center w-5 h-5 bg-blue-50 text-blue-600 rounded text-[10px] font-bold border border-blue-100 flex-shrink-0">
+                                                        <?= $prod['quantity'] ?>
+                                                    </span>
+                                                    <span class="font-medium text-gray-800 text-xs leading-tight"><?= htmlspecialchars($prod['product_name']) ?></span>
+                                                    <span class="text-[10px] text-gray-400 ml-auto whitespace-nowrap">MWK <?= number_format($prod['total'], 2) ?></span>
+                                                </div>
+                                            <?php endforeach; ?>
+                                        </div>
+                                    <?php endif; ?>
                                 </td>
+                                <!-- Payment -->
                                 <td class="px-5 py-4 whitespace-nowrap">
                                     <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold <?= $pm['bg'] ?> <?= $pm['text'] ?>">
                                         <i class="fas <?= $pm['icon'] ?>"></i>
                                         <?= ucwords(str_replace('_', ' ', $sale['payment_method'])) ?>
                                     </span>
                                 </td>
+                                <!-- Total -->
                                 <td class="px-5 py-4 whitespace-nowrap text-sm font-bold text-gray-900 text-right">
                                     MWK <?= number_format($sale['total_amount'], 2) ?>
                                 </td>
+                                <!-- Actions -->
                                 <td class="px-5 py-4 whitespace-nowrap text-center">
-                                    <button onclick="printSale(<?= htmlspecialchars(json_encode($sale)) ?>)"
-                                            class="inline-flex items-center gap-1.5 px-3 py-1.5 bg-gray-100 text-gray-700 rounded-lg text-xs font-semibold hover:bg-blue-100 hover:text-blue-700 transition-all">
-                                        <i class="fas fa-print"></i> Print
-                                    </button>
+                                    <div class="flex items-center justify-center gap-1.5">
+                                        <!-- Print -->
+                                        <button onclick="printSale(<?= htmlspecialchars(json_encode($sale)) ?>)"
+                                                title="Print receipt"
+                                                class="w-8 h-8 inline-flex items-center justify-center bg-gray-100 text-gray-600 rounded-lg text-xs hover:bg-gray-800 hover:text-white transition-all">
+                                            <i class="fas fa-print"></i>
+                                        </button>
+                                        <!-- Edit -->
+                                        <button onclick="editSale(<?= $sale['id'] ?>)"
+                                                title="Edit sale"
+                                                class="w-8 h-8 inline-flex items-center justify-center bg-blue-50 text-blue-600 border border-blue-100 rounded-lg text-xs hover:bg-blue-600 hover:text-white transition-all">
+                                            <i class="fas fa-pen"></i>
+                                        </button>
+                                        <!-- Delete -->
+                                        <button onclick="deleteSale(<?= $sale['id'] ?>)"
+                                                title="Void &amp; delete sale"
+                                                class="w-8 h-8 inline-flex items-center justify-center bg-red-50 text-red-500 border border-red-100 rounded-lg text-xs hover:bg-red-500 hover:text-white transition-all">
+                                            <i class="fas fa-trash"></i>
+                                        </button>
+                                    </div>
                                 </td>
                             </tr>
                         <?php endforeach; ?>
@@ -522,13 +570,11 @@ if (!function_exists("diPgUrl")) {
                     of <span class="font-semibold text-gray-800"><?= number_format($totalRecords) ?></span> transactions
                 </p>
                 <div class="flex items-center gap-1">
-                    <!-- Prev -->
                     <a href="<?= $currentPage > 1 ? pgUrl($currentPage - 1) : '#' ?>"
                        class="w-9 h-9 flex items-center justify-center rounded-lg border text-sm transition-all
                               <?= $currentPage > 1 ? 'border-gray-200 text-gray-600 hover:bg-gray-100' : 'border-gray-100 text-gray-300 cursor-not-allowed' ?>">
                         <i class="fas fa-angle-left"></i>
                     </a>
-
                     <?php
                     $pgStart = max(1, $currentPage - 2);
                     $pgEnd   = min($totalPages, $currentPage + 2);
@@ -536,7 +582,6 @@ if (!function_exists("diPgUrl")) {
                         <a href="<?= pgUrl(1) ?>" class="w-9 h-9 flex items-center justify-center rounded-lg border border-gray-200 text-sm text-gray-600 hover:bg-gray-100 transition-all">1</a>
                         <?php if ($pgStart > 2): ?><span class="w-9 h-9 flex items-center justify-center text-gray-400 text-sm">…</span><?php endif; ?>
                     <?php endif; ?>
-
                     <?php for ($pg = $pgStart; $pg <= $pgEnd; $pg++): ?>
                         <a href="<?= pgUrl($pg) ?>"
                            class="w-9 h-9 flex items-center justify-center rounded-lg border text-sm font-semibold transition-all
@@ -544,13 +589,10 @@ if (!function_exists("diPgUrl")) {
                             <?= $pg ?>
                         </a>
                     <?php endfor; ?>
-
                     <?php if ($pgEnd < $totalPages): ?>
                         <?php if ($pgEnd < $totalPages - 1): ?><span class="w-9 h-9 flex items-center justify-center text-gray-400 text-sm">…</span><?php endif; ?>
                         <a href="<?= pgUrl($totalPages) ?>" class="w-9 h-9 flex items-center justify-center rounded-lg border border-gray-200 text-sm text-gray-600 hover:bg-gray-100 transition-all"><?= $totalPages ?></a>
                     <?php endif; ?>
-
-                    <!-- Next -->
                     <a href="<?= $currentPage < $totalPages ? pgUrl($currentPage + 1) : '#' ?>"
                        class="w-9 h-9 flex items-center justify-center rounded-lg border text-sm transition-all
                               <?= $currentPage < $totalPages ? 'border-gray-200 text-gray-600 hover:bg-gray-100' : 'border-gray-100 text-gray-300 cursor-not-allowed' ?>">
@@ -562,36 +604,184 @@ if (!function_exists("diPgUrl")) {
     </div>
 </div>
 
+<!-- ── Edit Sale Modal ─────────────────────────────────────────────────── -->
+<div id="editSaleModal" class="hidden fixed inset-0 bg-gray-900/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+    <div class="bg-white rounded-2xl w-full max-w-lg overflow-hidden shadow-xl">
+        <div class="px-6 py-5 border-b border-gray-100 flex items-center justify-between">
+            <div>
+                <h2 class="text-base font-bold text-gray-900">Modify Sale <span id="editSaleIdDisplay" class="text-blue-600"></span></h2>
+                <p class="text-xs text-gray-400 mt-0.5">Adjust quantities for each item</p>
+            </div>
+            <button onclick="closeEditModal()"
+                    class="w-8 h-8 flex items-center justify-center rounded-lg bg-gray-100 text-gray-400 hover:bg-red-50 hover:text-red-500 transition-all text-xs">
+                <i class="fas fa-times"></i>
+            </button>
+        </div>
+        <div id="editSaleContent" class="p-5 max-h-[55vh] overflow-y-auto space-y-3">
+            <!-- Loaded via AJAX -->
+        </div>
+        <div class="px-6 py-4 bg-gray-50 border-t border-gray-100 flex items-center justify-between">
+            <div>
+                <p class="text-xs text-gray-400 font-medium mb-0.5">New Total</p>
+                <p id="editSaleNewTotal" class="text-lg font-bold text-gray-900">MWK 0.00</p>
+            </div>
+            <button onclick="saveSaleChanges()" id="saveEditBtn"
+                    class="px-5 py-2.5 bg-blue-600 text-white rounded-xl text-sm font-semibold hover:bg-blue-700 transition-all shadow-sm flex items-center gap-2">
+                <i class="fas fa-check"></i> Save Changes
+            </button>
+        </div>
+    </div>
+</div>
+
 <script>
-    function printSale(sale) {
-        const w = window.open('', '_blank');
-        const date = new Date(sale.created_at).toLocaleString();
-        w.document.write(`
-            <html><head><title>Sale Receipt #${sale.id}</title>
-            <style>
-                body{font-family:'Courier New',monospace;padding:20px;max-width:300px;margin:0 auto}
-                .header{text-align:center;margin-bottom:20px;border-bottom:1px dashed #000;padding-bottom:10px}
-                .row{display:flex;justify-content:space-between;margin-bottom:5px}
-                .total{border-top:1px dashed #000;margin-top:10px;padding-top:10px;font-weight:bold}
-                .footer{text-align:center;margin-top:20px;font-size:12px}
-                @media print{@page{margin:0}body{margin:1cm}}
-            </style></head>
-            <body>
-                <div class="header">
-                    <h3>Next-Level Pharmacy</h3>
-                    <p>Sale #${String(sale.id).padStart(5,'0')}</p>
-                    <p>${date}</p>
-                </div>
-                <div>
-                    <div class="row"><span>Cashier:</span><span>${sale.sold_by||'Unknown'}</span></div>
-                    <div class="total row"><span>Total:</span><span>MWK ${parseFloat(sale.total_amount).toFixed(2)}</span></div>
-                    <div class="row"><span>Payment:</span><span>${sale.payment_method||'Cash'}</span></div>
-                </div>
-                <div class="footer"><p>Thank you for your business!</p></div>
-                <script>window.onload=function(){window.print();window.close()}<\/script>
-            </body></html>`);
-        w.document.close();
+let currentEditingSaleId = null;
+
+// ── Edit ──────────────────────────────────────────────────────────────────
+async function editSale(saleId) {
+    currentEditingSaleId = saleId;
+    document.getElementById('editSaleIdDisplay').innerText = '#' + String(saleId).padStart(5, '0');
+    const modal   = document.getElementById('editSaleModal');
+    const content = document.getElementById('editSaleContent');
+    modal.classList.remove('hidden');
+
+    content.innerHTML = `
+        <div class="flex flex-col items-center py-10 gap-3 text-gray-300">
+            <i class="fas fa-circle-notch fa-spin text-2xl"></i>
+            <p class="text-xs font-semibold uppercase tracking-wide">Loading…</p>
+        </div>`;
+
+    try {
+        const res  = await fetch(`api/sales/get-items.php?sale_id=${saleId}`);
+        const data = await res.json();
+
+        if (data.status === 'success') {
+            let html = '';
+            data.items.forEach(item => {
+                html += `
+                <div class="flex items-center justify-between p-4 bg-gray-50 border border-gray-100 rounded-xl sale-item-row"
+                     data-id="${item.id}" data-price="${item.price_at_sale}">
+                    <div>
+                        <p class="text-sm font-semibold text-gray-800">${item.product_name}</p>
+                        <p class="text-xs text-gray-400 mt-0.5">MWK ${parseFloat(item.price_at_sale).toFixed(2)} / unit</p>
+                    </div>
+                    <div class="flex items-center gap-2 bg-white border border-gray-200 rounded-xl p-1.5">
+                        <button onclick="updateQty(${item.id}, -1)"
+                                class="w-7 h-7 flex items-center justify-center rounded-lg bg-gray-100 text-gray-500 hover:bg-red-100 hover:text-red-500 transition-all text-xs">
+                            <i class="fas fa-minus"></i>
+                        </button>
+                        <input type="number" value="${item.quantity}" min="1"
+                               class="w-10 text-center text-sm font-bold text-gray-800 bg-transparent border-none outline-none qty-input"
+                               onchange="calculateEditTotal()" id="qty-${item.id}">
+                        <button onclick="updateQty(${item.id}, 1)"
+                                class="w-7 h-7 flex items-center justify-center rounded-lg bg-gray-100 text-gray-500 hover:bg-emerald-100 hover:text-emerald-500 transition-all text-xs">
+                            <i class="fas fa-plus"></i>
+                        </button>
+                    </div>
+                </div>`;
+            });
+            content.innerHTML = html;
+            calculateEditTotal();
+        } else {
+            content.innerHTML = `<div class="py-8 text-center text-red-500 text-sm font-semibold">${data.message}</div>`;
+        }
+    } catch {
+        content.innerHTML = `<div class="py-8 text-center text-red-500 text-sm font-semibold">Network error. Please try again.</div>`;
     }
+}
+
+function updateQty(itemId, delta) {
+    const input = document.getElementById(`qty-${itemId}`);
+    input.value = Math.max(1, parseInt(input.value) + delta);
+    calculateEditTotal();
+}
+
+function calculateEditTotal() {
+    let total = 0;
+    document.querySelectorAll('.sale-item-row').forEach(row => {
+        total += parseFloat(row.dataset.price) * parseInt(row.querySelector('.qty-input').value);
+    });
+    document.getElementById('editSaleNewTotal').innerText = 'MWK ' + total.toLocaleString('en-US', { minimumFractionDigits: 2 });
+}
+
+function closeEditModal() {
+    document.getElementById('editSaleModal').classList.add('hidden');
+}
+
+async function saveSaleChanges() {
+    const btn  = document.getElementById('saveEditBtn');
+    const orig = btn.innerHTML;
+    const items = [];
+    document.querySelectorAll('.sale-item-row').forEach(row => {
+        items.push({ sale_item_id: parseInt(row.dataset.id), new_quantity: parseInt(row.querySelector('.qty-input').value) });
+    });
+
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Saving…';
+
+    try {
+        const res  = await fetch('api/sales/update.php', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ sale_id: currentEditingSaleId, items, csrf_token: '<?= $_SESSION['csrf_token'] ?? '' ?>' })
+        });
+        const data = await res.json();
+        if (data.status === 'success') { location.reload(); }
+        else { alert(data.message); btn.disabled = false; btn.innerHTML = orig; }
+    } catch {
+        alert('A network error occurred.'); btn.disabled = false; btn.innerHTML = orig;
+    }
+}
+
+// ── Delete ────────────────────────────────────────────────────────────────
+async function deleteSale(saleId) {
+    if (!confirm('This will permanently void Sale #' + String(saleId).padStart(5,'0') + ' and restore inventory. Are you sure?')) return;
+    try {
+        const res  = await fetch('api/sales/delete.php', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ sale_id: saleId, csrf_token: '<?= $_SESSION['csrf_token'] ?? '' ?>' })
+        });
+        const data = await res.json();
+        if (data.status === 'success') { location.reload(); }
+        else { alert(data.message); }
+    } catch { alert('Error communicating with server.'); }
+}
+
+// ── Print ─────────────────────────────────────────────────────────────────
+function printSale(sale) {
+    const w = window.open('', '_blank');
+    const date = new Date(sale.created_at).toLocaleString();
+    w.document.write(`
+        <html><head><title>Sale Receipt #${sale.id}</title>
+        <style>
+            body{font-family:'Courier New',monospace;padding:20px;max-width:300px;margin:0 auto}
+            .header{text-align:center;margin-bottom:20px;border-bottom:1px dashed #000;padding-bottom:10px}
+            .row{display:flex;justify-content:space-between;margin-bottom:5px}
+            .total{border-top:1px dashed #000;margin-top:10px;padding-top:10px;font-weight:bold}
+            .footer{text-align:center;margin-top:20px;font-size:12px}
+            @media print{@page{margin:0}body{margin:1cm}}
+        </style></head>
+        <body>
+            <div class="header">
+                <h3>Next-Level Pharmacy</h3>
+                <p>Sale #${String(sale.id).padStart(5,'0')}</p>
+                <p>${date}</p>
+            </div>
+            <div>
+                <div class="row"><span>Cashier:</span><span>${sale.sold_by||'Unknown'}</span></div>
+                <div class="total row"><span>Total:</span><span>MWK ${parseFloat(sale.total_amount).toFixed(2)}</span></div>
+                <div class="row"><span>Payment:</span><span>${sale.payment_method||'Cash'}</span></div>
+            </div>
+            <div class="footer"><p>Thank you for your business!</p></div>
+            <script>window.onload=function(){window.print();window.close()}<\/script>
+        </body></html>`);
+    w.document.close();
+}
+
+// Close modal on backdrop click
+document.getElementById('editSaleModal').addEventListener('click', function(e) {
+    if (e.target === this) closeEditModal();
+});
 </script>
 
 <?php if (!empty($chartLabels) && !empty($chartValues)): ?>
