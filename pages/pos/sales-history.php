@@ -15,6 +15,7 @@ try {
     $dateFilterInput = $_GET['date']      ?? date('Y-m-d');
     $dateFilter      = date('Y-m-d', strtotime($dateFilterInput));
     $searchId        = $_GET['search_id'] ?? '';
+    $searchProduct   = $_GET['search']   ?? '';
 
     // Pagination
     $page    = max(1, intval($_GET['p'] ?? 1));
@@ -25,6 +26,10 @@ try {
     $countQ = "SELECT COUNT(DISTINCT s.id) FROM sales s LEFT JOIN sale_items si ON s.id = si.sale_id WHERE DATE(s.created_at) = ?";
     $countP = [$dateFilter];
     if (!empty($searchId)){ $countQ .= " AND s.id = ?"; $countP[] = intval($searchId); }
+    if (!empty($searchProduct)) { 
+        $countQ .= " AND si.product_id IN (SELECT id FROM products WHERE name LIKE ?)"; 
+        $countP[] = '%' . $searchProduct . '%'; 
+    }
 
     $countStmt    = $conn->prepare($countQ);
     $countStmt->execute($countP);
@@ -47,6 +52,10 @@ try {
               WHERE DATE(s.created_at) = ?";
     $queryParams = [$dateFilter];
     if (!empty($searchId)){ $query .= " AND s.id = ?"; $queryParams[] = intval($searchId); }
+    if (!empty($searchProduct)) { 
+        $query .= " AND p.name LIKE ?"; 
+        $queryParams[] = '%' . $searchProduct . '%'; 
+    }
     $query .= " ORDER BY s.created_at DESC, si.id ASC LIMIT " . (int)$perPage . " OFFSET " . (int)$offset;
 
     $stmt      = $conn->prepare($query);
@@ -55,9 +64,13 @@ try {
 
     // Summary
     $sumQ = "SELECT COUNT(DISTINCT s.id) as total_sales, COALESCE(SUM(si.total), 0) as total_revenue
-             FROM sales s JOIN sale_items si ON s.id = si.sale_id WHERE DATE(s.created_at) = ?";
+             FROM sales s JOIN sale_items si ON s.id = si.sale_id JOIN products p ON si.product_id = p.id WHERE DATE(s.created_at) = ?";
     $sumP = [$dateFilter];
     if (!empty($searchId)){ $sumQ .= " AND s.id = ?"; $sumP[] = intval($searchId); }
+    if (!empty($searchProduct)) { 
+        $sumQ .= " AND p.name LIKE ?"; 
+        $sumP[] = '%' . $searchProduct . '%'; 
+    }
     $sumStmt = $conn->prepare($sumQ);
     $sumStmt->execute($sumP);
     $summary = $sumStmt->fetch(PDO::FETCH_ASSOC);
@@ -132,6 +145,17 @@ $paymentLabels = [
                 </div>
             </div>
 
+            <!-- Product Search -->
+            <div class="flex-1 min-w-[140px]">
+                <label class="block text-xs font-semibold text-gray-500 mb-1.5">Product</label>
+                <div class="relative">
+                    <i class="fas fa-box absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-300 text-xs"></i>
+                    <input type="text" name="search" value="<?= htmlspecialchars($searchProduct) ?>"
+                           placeholder="Search product..."
+                           class="w-full pl-8 pr-3 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm font-medium text-gray-700 placeholder:text-gray-300 focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400 focus:bg-white outline-none transition-all">
+                </div>
+            </div>
+
             <!-- Date -->
             <div class="flex-[2] min-w-[180px]">
                 <label class="block text-xs font-semibold text-gray-500 mb-1.5">Date</label>
@@ -148,7 +172,7 @@ $paymentLabels = [
                         class="px-5 py-2.5 bg-gray-900 text-white rounded-xl text-sm font-semibold hover:bg-black transition-all shadow-sm flex items-center gap-2">
                     <i class="fas fa-search text-xs"></i> Search
                 </button>
-                <?php if (!empty($searchId) || $dateFilter !== date('Y-m-d')): ?>
+                <?php if (!empty($searchId) || $dateFilter !== date('Y-m-d') || !empty($searchProduct)): ?>
                     <a href="?page=pos&view=sales-history"
                        class="px-4 py-2.5 bg-red-50 text-red-500 border border-red-100 rounded-xl text-sm font-semibold hover:bg-red-100 transition-all flex items-center gap-1.5">
                         <i class="fas fa-times text-xs"></i> Clear
@@ -254,7 +278,7 @@ $paymentLabels = [
                 </p>
                 <div class="flex items-center gap-1">
                     <?php
-                    $base = "?page=pos&view=sales-history&date={$dateFilter}&search_id={$searchId}&p=";
+                    $base = "?page=pos&view=sales-history&date={$dateFilter}&search_id={$searchId}&search=" . urlencode($searchProduct) . "&p=";
                     ?>
                     <!-- Prev -->
                     <a href="<?= $page > 1 ? $base.($page-1) : '#' ?>"

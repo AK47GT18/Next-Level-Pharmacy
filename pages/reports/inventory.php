@@ -11,6 +11,7 @@ try {
     // Filters
     $categoryFilter = $_GET['category']    ?? '';
     $stockFilter    = $_GET['stock_level'] ?? '';
+    $searchQuery    = $_GET['search']      ?? '';
 
     // Pagination
     $perPage     = 20;
@@ -19,6 +20,15 @@ try {
     // ── WHERE clause (shared) ────────────────────────────────────────────
     $where  = " WHERE 1=1";
     $params = [];
+
+    // Add search filter if provided
+    if ($searchQuery) {
+        $where   .= " AND (p.name LIKE ? OR p.description LIKE ? OR c.name LIKE ?)";
+        $searchTerm = '%' . $searchQuery . '%';
+        $params[] = $searchTerm;
+        $params[] = $searchTerm;
+        $params[] = $searchTerm;
+    }
 
     if ($categoryFilter) {
         $where   .= " AND p.category_id = ?";
@@ -215,6 +225,10 @@ function invPgUrl(int $pg): string {
                 <input type="hidden" name="view" value="inventory">
                 <input type="hidden" name="pg"   value="1">
 
+                <input type="text" name="search" value="<?= htmlspecialchars($searchQuery) ?>"
+                       placeholder="Search products..."
+                       class="px-3 py-2 bg-white rounded-xl border border-gray-200 text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none min-w-[150px]">
+
                 <select name="category"
                         class="px-3 py-2 bg-white rounded-xl border border-gray-200 text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none">
                     <option value="">All Categories</option>
@@ -238,7 +252,7 @@ function invPgUrl(int $pg): string {
                     <i class="fas fa-filter mr-1"></i>Apply
                 </button>
 
-                <?php if ($categoryFilter || $stockFilter): ?>
+                <?php if ($categoryFilter || $stockFilter || $searchQuery): ?>
                     <a href="?page=reports&view=inventory"
                        class="px-4 py-2 bg-gray-100 text-gray-700 rounded-xl text-sm font-semibold hover:bg-gray-200 transition-all">
                         <i class="fas fa-times mr-1"></i>Clear
