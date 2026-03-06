@@ -610,7 +610,7 @@ if (!function_exists("diPgUrl")) {
         <div class="px-6 py-5 border-b border-gray-100 flex items-center justify-between">
             <div>
                 <h2 class="text-base font-bold text-gray-900">Modify Sale <span id="editSaleIdDisplay" class="text-blue-600"></span></h2>
-                <p class="text-xs text-gray-400 mt-0.5">Adjust quantities for each item</p>
+                <p class="text-xs text-gray-400 mt-0.5">Adjust quantities or remove items</p>
             </div>
             <button onclick="closeEditModal()"
                     class="w-8 h-8 flex items-center justify-center rounded-lg bg-gray-100 text-gray-400 hover:bg-red-50 hover:text-red-500 transition-all text-xs">
@@ -629,6 +629,43 @@ if (!function_exists("diPgUrl")) {
                     class="px-5 py-2.5 bg-blue-600 text-white rounded-xl text-sm font-semibold hover:bg-blue-700 transition-all shadow-sm flex items-center gap-2">
                 <i class="fas fa-check"></i> Save Changes
             </button>
+        </div>
+    </div>
+</div>
+
+<!-- ── Delete Sale Modal ─────────────────────────────────────────────────── -->
+<div id="deleteSaleModal" class="hidden fixed inset-0 bg-gray-900/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+    <div class="bg-white rounded-2xl w-full max-w-lg overflow-hidden shadow-xl">
+        <div class="px-6 py-5 border-b border-gray-100 flex items-center justify-between">
+            <div>
+                <h2 class="text-base font-bold text-gray-900">Void Sale <span id="deleteSaleIdDisplay" class="text-red-600"></span></h2>
+                <p class="text-xs text-gray-400 mt-0.5">Select items to remove from this sale</p>
+            </div>
+            <button onclick="closeDeleteModal()"
+                    class="w-8 h-8 flex items-center justify-center rounded-lg bg-gray-100 text-gray-400 hover:bg-red-50 hover:text-red-500 transition-all text-xs">
+                <i class="fas fa-times"></i>
+            </button>
+        </div>
+        <div id="deleteSaleContent" class="p-5 max-h-[55vh] overflow-y-auto space-y-3">
+            <!-- Loaded via AJAX -->
+        </div>
+        <div class="px-6 py-4 bg-gray-50 border-t border-gray-100 flex items-center justify-between">
+            <div class="flex items-center gap-3">
+                <label class="flex items-center gap-2 cursor-pointer">
+                    <input type="checkbox" id="selectAllDeleteItems" onchange="toggleSelectAllDelete()" class="w-4 h-4 text-blue-600 rounded border-gray-300 focus:ring-blue-500">
+                    <span class="text-sm text-gray-600">Select All</span>
+                </label>
+            </div>
+            <div class="flex gap-2">
+                <button onclick="closeDeleteModal()"
+                        class="px-4 py-2.5 bg-gray-100 text-gray-700 rounded-xl text-sm font-semibold hover:bg-gray-200 transition-all">
+                    Cancel
+                </button>
+                <button onclick="confirmDeleteItems()" id="confirmDeleteBtn"
+                        class="px-5 py-2.5 bg-red-600 text-white rounded-xl text-sm font-semibold hover:bg-red-700 transition-all shadow-sm flex items-center gap-2">
+                    <i class="fas fa-trash"></i> Remove Selected
+                </button>
+            </div>
         </div>
     </div>
 </div>
@@ -656,11 +693,13 @@ async function editSale(saleId) {
 
         if (data.status === 'success') {
             let html = '';
-            data.items.forEach(item => {
+            // Use data.data since API returns {status, data} not {status, items}
+            const items = data.data || [];
+            items.forEach(item => {
                 html += `
                 <div class="flex items-center justify-between p-4 bg-gray-50 border border-gray-100 rounded-xl sale-item-row"
-                     data-id="${item.id}" data-price="${item.price_at_sale}">
-                    <div>
+                     data-id="${item.id}" data-price="${item.price_at_sale}" data-product-id="${item.product_id}">
+                    <div class="flex-1">
                         <p class="text-sm font-semibold text-gray-800">${item.product_name}</p>
                         <p class="text-xs text-gray-400 mt-0.5">MWK ${parseFloat(item.price_at_sale).toFixed(2)} / unit</p>
                     </div>
@@ -669,7 +708,7 @@ async function editSale(saleId) {
                                 class="w-7 h-7 flex items-center justify-center rounded-lg bg-gray-100 text-gray-500 hover:bg-red-100 hover:text-red-500 transition-all text-xs">
                             <i class="fas fa-minus"></i>
                         </button>
-                        <input type="number" value="${item.quantity}" min="1"
+                        <input type="number" value="${item.quantity}" min="0"
                                class="w-10 text-center text-sm font-bold text-gray-800 bg-transparent border-none outline-none qty-input"
                                onchange="calculateEditTotal()" id="qty-${item.id}">
                         <button onclick="updateQty(${item.id}, 1)"
@@ -677,6 +716,11 @@ async function editSale(saleId) {
                             <i class="fas fa-plus"></i>
                         </button>
                     </div>
+                    <button onclick="removeItem(${item.id}, ${item.product_id}, ${item.quantity})"
+                            class="ml-2 w-7 h-7 flex items-center justify-center rounded-lg bg-red-50 text-red-400 hover:bg-red-500 hover:text-white transition-all text-xs"
+                            title="Remove item">
+                        <i class="fas fa-trash"></i>
+                    </button>
                 </div>`;
             });
             content.innerHTML = html;
@@ -691,14 +735,50 @@ async function editSale(saleId) {
 
 function updateQty(itemId, delta) {
     const input = document.getElementById(`qty-${itemId}`);
-    input.value = Math.max(1, parseInt(input.value) + delta);
+    const newVal = Math.max(0, parseInt(input.value) + delta);
+    input.value = newVal;
+    
+    // If quantity becomes 0, remove the item row
+    if (newVal === 0) {
+        const row = input.closest('.sale-item-row');
+        const productId = row.dataset.productId;
+        const quantity = parseInt(row.querySelector('.qty-input').dataset.originalQty || row.querySelector('.qty-input').value);
+        
+        // Mark for removal (we'll handle it when saving)
+        row.dataset.removeItem = 'true';
+        row.style.opacity = '0.5';
+        row.style.textDecoration = 'line-through';
+    }
+    
+    calculateEditTotal();
+}
+
+// Remove item completely from the sale
+function removeItem(itemId, productId, quantity) {
+    if (!confirm('Are you sure you want to remove this item from the sale? This will restore ' + quantity + ' unit(s) to inventory.')) {
+        return;
+    }
+    
+    const row = document.querySelector(`.sale-item-row[data-id="${itemId}"]`);
+    if (row) {
+        row.dataset.removeItem = 'true';
+        row.style.opacity = '0.5';
+        row.style.textDecoration = 'line-through';
+    }
+    
     calculateEditTotal();
 }
 
 function calculateEditTotal() {
     let total = 0;
     document.querySelectorAll('.sale-item-row').forEach(row => {
-        total += parseFloat(row.dataset.price) * parseInt(row.querySelector('.qty-input').value);
+        // Skip removed items
+        if (row.dataset.removeItem === 'true') return;
+        
+        const qty = parseInt(row.querySelector('.qty-input').value);
+        if (qty > 0) {
+            total += parseFloat(row.dataset.price) * qty;
+        }
     });
     document.getElementById('editSaleNewTotal').innerText = 'MWK ' + total.toLocaleString('en-US', { minimumFractionDigits: 2 });
 }
@@ -711,9 +791,31 @@ async function saveSaleChanges() {
     const btn  = document.getElementById('saveEditBtn');
     const orig = btn.innerHTML;
     const items = [];
+    const removedItems = [];
+    
     document.querySelectorAll('.sale-item-row').forEach(row => {
-        items.push({ sale_item_id: parseInt(row.dataset.id), new_quantity: parseInt(row.querySelector('.qty-input').value) });
+        const itemId = parseInt(row.dataset.id);
+        const productId = parseInt(row.dataset.productId);
+        const newQuantity = parseInt(row.querySelector('.qty-input').value);
+        
+        // Check if item should be removed
+        if (row.dataset.removeItem === 'true') {
+            removedItems.push({ 
+                sale_item_id: itemId, 
+                product_id: productId,
+                quantity: newQuantity 
+            });
+        } else {
+            items.push({ sale_item_id: itemId, new_quantity: newQuantity });
+        }
     });
+
+    // If there are removed items, confirm with user
+    if (removedItems.length > 0) {
+        if (!confirm(`You are about to remove ${removedItems.length} item(s) from this sale. This will restore the items to inventory. Continue?`)) {
+            return;
+        }
+    }
 
     btn.disabled = true;
     btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Saving…';
@@ -722,7 +824,12 @@ async function saveSaleChanges() {
         const res  = await fetch('api/sales/update.php', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ sale_id: currentEditingSaleId, items, csrf_token: '<?= $_SESSION['csrf_token'] ?? '' ?>' })
+            body: JSON.stringify({ 
+                sale_id: currentEditingSaleId, 
+                items, 
+                removed_items: removedItems,
+                csrf_token: '<?= $_SESSION['csrf_token'] ?? '' ?>' 
+            })
         });
         const data = await res.json();
         if (data.status === 'success') { location.reload(); }
@@ -733,19 +840,130 @@ async function saveSaleChanges() {
 }
 
 // ── Delete ────────────────────────────────────────────────────────────────
+let currentDeletingSaleId = null;
+
 async function deleteSale(saleId) {
-    if (!confirm('This will permanently void Sale #' + String(saleId).padStart(5,'0') + ' and restore inventory. Are you sure?')) return;
+    currentDeletingSaleId = saleId;
+    document.getElementById('deleteSaleIdDisplay').innerText = '#' + String(saleId).padStart(5, '0');
+    const modal   = document.getElementById('deleteSaleModal');
+    const content = document.getElementById('deleteSaleContent');
+    modal.classList.remove('hidden');
+
+    content.innerHTML = `
+        <div class="flex flex-col items-center py-10 gap-3 text-gray-300">
+            <i class="fas fa-circle-notch fa-spin text-2xl"></i>
+            <p class="text-xs font-semibold uppercase tracking-wide">Loading…</p>
+        </div>`;
+
     try {
-        const res  = await fetch('api/sales/delete.php', {
+        const res  = await fetch(`api/sales/get-items.php?sale_id=${saleId}`);
+        const data = await res.json();
+
+        if (data.status === 'success') {
+            const items = data.data || [];
+            if (items.length === 0) {
+                content.innerHTML = `<div class="py-8 text-center text-gray-500 text-sm font-semibold">No items in this sale</div>`;
+                return;
+            }
+            
+            let html = '';
+            items.forEach(item => {
+                html += `
+                <div class="flex items-center justify-between p-4 bg-gray-50 border border-gray-100 rounded-xl">
+                    <div class="flex items-center gap-3">
+                        <input type="checkbox" value="${item.id}" data-product-id="${item.product_id}" data-quantity="${item.quantity}" 
+                               class="delete-item-checkbox w-4 h-4 text-blue-600 rounded border-gray-300 focus:ring-blue-500">
+                        <div>
+                            <p class="text-sm font-semibold text-gray-800">${item.product_name}</p>
+                            <p class="text-xs text-gray-400 mt-0.5">MWK ${parseFloat(item.price_at_sale).toFixed(2)} × ${item.quantity}</p>
+                        </div>
+                    </div>
+                    <p class="text-sm font-bold text-gray-900">MWK ${(parseFloat(item.price_at_sale) * item.quantity).toFixed(2)}</p>
+                </div>`;
+            });
+            content.innerHTML = html;
+        } else {
+            content.innerHTML = `<div class="py-8 text-center text-red-500 text-sm font-semibold">${data.message}</div>`;
+        }
+    } catch {
+        content.innerHTML = `<div class="py-8 text-center text-red-500 text-sm font-semibold">Network error. Please try again.</div>`;
+    }
+}
+
+function closeDeleteModal() {
+    document.getElementById('deleteSaleModal').classList.add('hidden');
+}
+
+function toggleSelectAllDelete() {
+    const selectAll = document.getElementById('selectAllDeleteItems');
+    const checkboxes = document.querySelectorAll('.delete-item-checkbox');
+    checkboxes.forEach(cb => cb.checked = selectAll.checked);
+}
+
+async function confirmDeleteItems() {
+    const selectedItems = [];
+    document.querySelectorAll('.delete-item-checkbox:checked').forEach(cb => {
+        selectedItems.push({
+            sale_item_id: parseInt(cb.value),
+            product_id: parseInt(cb.dataset.productId),
+            quantity: parseInt(cb.dataset.quantity)
+        });
+    });
+
+    if (selectedItems.length === 0) {
+        alert('Please select at least one item to remove.');
+        return;
+    }
+
+    if (!confirm(`Are you sure you want to remove ${selectedItems.length} item(s) from this sale? This will restore the items to inventory.`)) {
+        return;
+    }
+
+    const btn  = document.getElementById('confirmDeleteBtn');
+    const orig = btn.innerHTML;
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Removing…';
+
+    try {
+        const res  = await fetch('api/sales/update.php', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ sale_id: saleId, csrf_token: '<?= $_SESSION['csrf_token'] ?? '' ?>' })
+            body: JSON.stringify({ 
+                sale_id: currentDeletingSaleId, 
+                items: [],
+                removed_items: selectedItems,
+                csrf_token: '<?= $_SESSION['csrf_token'] ?? '' ?>' 
+            })
         });
         const data = await res.json();
-        if (data.status === 'success') { location.reload(); }
-        else { alert(data.message); }
-    } catch { alert('Error communicating with server.'); }
+        if (data.status === 'success') { 
+            // Check if there are remaining items
+            const remainingItems = document.querySelectorAll('.delete-item-checkbox:not(:checked)');
+            if (remainingItems.length === 0) {
+                // All items removed, reload page
+                location.reload(); 
+            } else {
+                // Some items remain, close modal and refresh
+                closeDeleteModal();
+                // Refresh the sales list
+                location.reload();
+            }
+        } else { 
+            alert(data.message); 
+            btn.disabled = false; 
+            btn.innerHTML = orig; 
+        }
+    } catch {
+        alert('A network error occurred.'); 
+        btn.disabled = false; 
+        btn.innerHTML = orig;
+    }
 }
+
+// Close modal on backdrop click
+document.getElementById('deleteSaleModal')?.addEventListener('click', function(e) {
+    if (e.target === this) closeDeleteModal();
+});
 
 // ── Print ─────────────────────────────────────────────────────────────────
 function printSale(sale) {

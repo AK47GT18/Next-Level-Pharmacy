@@ -26,8 +26,9 @@ if (!validateCsrfToken($input["csrf_token"] ?? "")) {
 
 $saleId = intval($input["sale_id"] ?? 0);
 $items = $input["items"] ?? [];
+$removedItems = $input["removed_items"] ?? [];
 
-if ($saleId <= 0 || empty($items)) {
+if ($saleId <= 0 || (empty($items) && empty($removedItems))) {
     http_response_code(400);
     echo json_encode(["status" => "error", "message" => "sale_id and items are required"]);
     exit;
@@ -39,6 +40,25 @@ try {
     $conn->beginTransaction();
 
     $newTotal = 0;
+
+    // Handle removed items first - restore stock and delete from sale_items
+    foreach ($removedItems as $item) {
+        $saleItemId = intval($item["sale_item_id"] ?? 0);
+        $productId = intval($item["product_id"] ?? 0);
+        $quantity = intval($item["quantity"] ?? 0);
+        
+        if ($saleItemId <= 0 || $productId <= 0 || $quantity <= 0) continue;
+        
+        // Restore stock to inventory
+        $conn->prepare("UPDATE products SET stock = stock + ? WHERE id = ?")->execute([$quantity, $productId]);
+        
+        // Log the stock restoration
+        $conn->prepare("INSERT INTO stock_logs (product_id, quantity_change, type, notes, created_by) VALUES (?, ?, 'adjustment', ?, ?)")
+             ->execute([$productId, $quantity, "Sale #$saleId edited: removed item, +$quantity restored", $_SESSION["user_id"]]);
+        
+        // Delete the sale item
+        $conn->prepare("DELETE FROM sale_items WHERE id = ?")->execute([$saleItemId]);
+    }
 
     foreach ($items as $item) {
         $saleItemId = intval($item["sale_item_id"] ?? 0);
