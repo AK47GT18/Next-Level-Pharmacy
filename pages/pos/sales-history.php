@@ -5,7 +5,7 @@ require_once __DIR__ . '/../../includes/check-auth.php';
 require_once __DIR__ . '/../../includes/auth.php';
 require_once __DIR__ . '/../../config/database.php';
 
-$isAdmin = ($_SESSION['role'] ?? '') === 'admin', 'cashier';
+$isAdmin = ($_SESSION['role'] ?? '') === 'admin';
 $userId  = $_SESSION['user_id'] ?? null;
 
 try {
