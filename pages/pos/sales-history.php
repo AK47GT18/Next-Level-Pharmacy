@@ -5,7 +5,6 @@ require_once __DIR__ . '/../../includes/check-auth.php';
 require_once __DIR__ . '/../../includes/auth.php';
 require_once __DIR__ . '/../../config/database.php';
 
-$isAdmin = ($_SESSION['role'] ?? '') === 'admin';
 $userId  = $_SESSION['user_id'] ?? null;
 
 try {
@@ -25,8 +24,7 @@ try {
     // Count
     $countQ = "SELECT COUNT(DISTINCT s.id) FROM sales s LEFT JOIN sale_items si ON s.id = si.sale_id WHERE DATE(s.created_at) = ?";
     $countP = [$dateFilter];
-    if (!$isAdmin)        { $countQ .= " AND s.sold_by = ?"; $countP[] = $userId; }
-    if (!empty($searchId)){ $countQ .= " AND s.id = ?";      $countP[] = intval($searchId); }
+    if (!empty($searchId)){ $countQ .= " AND s.id = ?"; $countP[] = intval($searchId); }
 
     $countStmt    = $conn->prepare($countQ);
     $countStmt->execute($countP);
@@ -48,8 +46,7 @@ try {
               LEFT JOIN payments pm ON s.id = pm.sale_id
               WHERE DATE(s.created_at) = ?";
     $queryParams = [$dateFilter];
-    if (!$isAdmin)        { $query .= " AND s.sold_by = ?"; $queryParams[] = $userId; }
-    if (!empty($searchId)){ $query .= " AND s.id = ?";      $queryParams[] = intval($searchId); }
+    if (!empty($searchId)){ $query .= " AND s.id = ?"; $queryParams[] = intval($searchId); }
     $query .= " ORDER BY s.created_at DESC, si.id ASC LIMIT " . (int)$perPage . " OFFSET " . (int)$offset;
 
     $stmt      = $conn->prepare($query);
@@ -60,8 +57,7 @@ try {
     $sumQ = "SELECT COUNT(DISTINCT s.id) as total_sales, COALESCE(SUM(si.total), 0) as total_revenue
              FROM sales s JOIN sale_items si ON s.id = si.sale_id WHERE DATE(s.created_at) = ?";
     $sumP = [$dateFilter];
-    if (!$isAdmin)        { $sumQ .= " AND s.sold_by = ?"; $sumP[] = $userId; }
-    if (!empty($searchId)){ $sumQ .= " AND s.id = ?";      $sumP[] = intval($searchId); }
+    if (!empty($searchId)){ $sumQ .= " AND s.id = ?"; $sumP[] = intval($searchId); }
     $sumStmt = $conn->prepare($sumQ);
     $sumStmt->execute($sumP);
     $summary = $sumStmt->fetch(PDO::FETCH_ASSOC);
@@ -87,10 +83,6 @@ $paymentLabels = [
             <h1 class="text-2xl font-bold text-gray-900 tracking-tight">Sales History</h1>
             <p class="text-sm text-gray-400 mt-0.5">
                 <?= date('l, F j, Y', strtotime($dateFilter)) ?>
-                <span class="mx-2 text-gray-200">·</span>
-                <span class="<?= $isAdmin ? 'text-blue-500' : 'text-gray-400' ?> font-medium">
-                    <?= $isAdmin ? 'Admin view' : 'Cashier view' ?>
-                </span>
             </p>
         </div>
         <a href="?page=dashboard"
